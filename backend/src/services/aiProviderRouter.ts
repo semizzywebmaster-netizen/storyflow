@@ -106,12 +106,55 @@ export class AIProviderRouter {
 
   private async selectModel(provider: Provider, metadata: any): Promise<string> {
     const requestedModel = typeof metadata?.model === 'string' ? metadata.model.trim() : ''
-    if (requestedModel) return requestedModel
 
-    const configuredModel = provider.metadata?.defaultModel
-    if (typeof configuredModel === 'string' && configuredModel.trim()) return configuredModel.trim()
+    if (requestedModel) {
+      const result = await query(
+        `SELECT name
+         FROM ai_models
+         WHERE provider_id = $1
+           AND name = $2
+           AND is_enabled = TRUE
+         LIMIT 1`,
+        [provider.id, requestedModel]
+      )
 
-    throw new Error(`No model configured for AI provider ${provider.name}`)
+      if (result.rows.length === 0) {
+        throw new Error(`Model ${requestedModel} is not enabled for AI provider ${provider.name}`)
+      }
+
+      return result.rows[0].name
+    }
+
+    const defaultModel = provider.metadata?.defaultModel
+    if (typeof defaultModel === 'string' && defaultModel.trim()) {
+      const result = await query(
+        `SELECT name
+         FROM ai_models
+         WHERE provider_id = $1
+           AND name = $2
+           AND is_enabled = TRUE
+         LIMIT 1`,
+        [provider.id, defaultModel.trim()]
+      )
+
+      if (result.rows.length > 0) return result.rows[0].name
+    }
+
+    const result = await query(
+      `SELECT name
+       FROM ai_models
+       WHERE provider_id = $1
+         AND is_enabled = TRUE
+       ORDER BY created_at ASC
+       LIMIT 1`,
+      [provider.id]
+    )
+
+    if (result.rows.length === 0) {
+      throw new Error(`No enabled model configured for AI provider ${provider.name}`)
+    }
+
+    return result.rows[0].name
   }
 
   async executeWithFallback(
