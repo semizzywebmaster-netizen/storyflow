@@ -1,7 +1,8 @@
 import { pool } from '../database/connection'
 
 export class CreditService {
-  async reserveCredits(userId: string, amount: number, referenceId: string, description: string): Promise<{ success: boolean; balanceAfter: number }> {
+  async reserveCredits(userId: string, amount: number, referenceId: string | null, description: string): Promise<{ success: boolean; balanceAfter: number }> {
+    if (!referenceId) throw new Error('Credit reservation reference is required')
     if (!Number.isInteger(amount) || amount <= 0) throw new Error('Credit amount must be a positive integer')
     const client = await pool.connect()
     try {
