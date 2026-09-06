@@ -1,4 +1,3 @@
-
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
@@ -26,15 +25,16 @@ import { notificationRoutes } from './routes/notification.routes'
 import { analyticsRoutes } from './routes/analytics.routes'
 
 const app = express()
+app.disable('x-powered-by')
 app.use(helmet())
 const allowedOrigins = [config.frontendUrl, ...(config.nodeEnv === 'development' ? ['http://localhost:5173', 'http://localhost:3000'] : [])]
 app.use(cors({ origin: allowedOrigins, credentials: true }))
 app.use(express.json({ limit: '10mb' }))
-app.use(express.urlencoded({ extended: true }))
+app.use(express.urlencoded({ extended: true, limit: '1mb' }))
 app.use(requestLogger)
 app.use(rateLimiter)
 
-app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0', masterKillSwitch: config.masterAiKillSwitch }))
+app.get('/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' }))
 app.use('/api/auth', authRoutes)
 app.use('/api/projects', projectRoutes)
 app.use('/api/stories', storyRoutes)
