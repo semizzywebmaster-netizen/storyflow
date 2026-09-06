@@ -40,6 +40,8 @@ export const config = {
 if (config.nodeEnv === 'production') {
   if (!process.env.JWT_SECRET || config.jwtSecret === 'dev-jwt-secret-change-in-production') throw new Error('JWT_SECRET must be configured in production')
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL must be configured in production')
+  if (!process.env.FRONTEND_URL) throw new Error('FRONTEND_URL must be configured in production')
+  if (!config.r2.accountId || !config.r2.accessKeyId || !config.r2.secretAccessKey || !config.r2.publicUrl) throw new Error('R2 storage configuration must be complete in production')
   if (config.enableMock) throw new Error('ENABLE_MOCK must be false in production')
 }
 
