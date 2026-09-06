@@ -5,7 +5,7 @@
 
 import { appConfig } from '@/config'
 import type { IAuthService, IProjectService, IStoryService, ICharacterService, ISceneService, IImageService, IVoiceService, IVideoService, ICreditService, IWalletService, IPaymentService, INotificationService, IAdminService } from './interfaces'
-import { realAuthService, realProjectService, realStoryService, realCreditService, realWalletService, realNotificationService } from './real'
+import { realAuthService, realProjectService, realStoryService, realCharacterService, realCreditService, realWalletService, realNotificationService } from './real'
 
 let services: { auth?: IAuthService; project?: IProjectService; story?: IStoryService; character?: ICharacterService; scene?: ISceneService; image?: IImageService; voice?: IVoiceService; video?: IVideoService; credit?: ICreditService; wallet?: IWalletService; payment?: IPaymentService; notification?: INotificationService; admin?: IAdminService } = {}
 
@@ -17,7 +17,7 @@ async function loadMock<T>(loader: () => Promise<any>): Promise<T> {
 export async function getAuthService(): Promise<IAuthService> { if (services.auth) return services.auth; services.auth = appConfig.enableMock ? await loadMock(() => import('./mock/authMockService')) : realAuthService as unknown as IAuthService; return services.auth }
 export async function getProjectService(): Promise<IProjectService> { if (services.project) return services.project; services.project = appConfig.enableMock ? await loadMock(() => import('./mock/projectMockService')) : realProjectService as unknown as IProjectService; return services.project }
 export async function getStoryService(): Promise<IStoryService> { if (services.story) return services.story; services.story = appConfig.enableMock ? await loadMock(() => import('./mock/storyMockService')) : realStoryService as unknown as IStoryService; return services.story }
-export async function getCharacterService(): Promise<ICharacterService> { if (services.character) return services.character; services.character = await loadMock(() => import('./mock/characterMockService')); return services.character }
+export async function getCharacterService(): Promise<ICharacterService> { if (services.character) return services.character; services.character = appConfig.enableMock ? await loadMock(() => import('./mock/characterMockService')) : realCharacterService as unknown as ICharacterService; return services.character }
 export async function getSceneService(): Promise<ISceneService> { if (services.scene) return services.scene; services.scene = await loadMock(() => import('./mock/sceneMockService')); return services.scene }
 export async function getImageService(): Promise<IImageService> { if (services.image) return services.image; services.image = await loadMock(() => import('./mock/imageMockService')); return services.image }
 export async function getVoiceService(): Promise<IVoiceService> { if (services.voice) return services.voice; services.voice = await loadMock(() => import('./mock/voiceMockService')); return services.voice }
