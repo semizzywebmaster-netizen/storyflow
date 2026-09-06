@@ -29,7 +29,10 @@ app.disable('x-powered-by')
 app.use(helmet())
 const allowedOrigins = [config.frontendUrl, ...(config.nodeEnv === 'development' ? ['http://localhost:5173', 'http://localhost:3000'] : [])]
 app.use(cors({ origin: allowedOrigins, credentials: true }))
-app.use(express.json({ limit: '10mb' }))
+app.use(express.json({
+  limit: '10mb',
+  verify: (req, _res, buf) => { (req as any).rawBody = Buffer.from(buf) },
+}))
 app.use(express.urlencoded({ extended: true, limit: '1mb' }))
 app.use(requestLogger)
 app.use(rateLimiter)
