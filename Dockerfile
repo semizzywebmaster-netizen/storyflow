@@ -25,6 +25,7 @@ ENV NODE_ENV=production
 COPY --from=build --chown=storyflow:storyflow /app/backend/package*.json ./
 COPY --from=build --chown=storyflow:storyflow /app/backend/node_modules ./node_modules
 COPY --from=build --chown=storyflow:storyflow /app/backend/dist ./dist
+COPY --from=build --chown=storyflow:storyflow /app/backend/src/database/migrations ./dist/database/migrations
 
 USER storyflow
 EXPOSE 5000
