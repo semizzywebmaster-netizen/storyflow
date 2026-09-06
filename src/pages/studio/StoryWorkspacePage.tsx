@@ -1,106 +1,39 @@
+import { useCallback, useEffect, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Button } from '@/components/ui/button'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
+import { Textarea } from '@/components/ui/textarea'
+import { PageContainer } from '@/components/layout/PageContainer'
+import { AppShell } from '@/components/layout/AppShell'
+import { useToast } from '@/hooks/useToast'
+import { getStoryService } from '@/services'
+import { FileText, Clock, Users, Save, Sparkles, History, Stethoscope, RotateCcw } from 'lucide-react'
+import type { Story } from '@/types'
 
-import { Button } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
-import { PageContainer } from "@/components/layout/PageContainer"
-import { AppShell } from "@/components/layout/AppShell"
-import { FileText, Clock, Users, MapPin, Save, Sparkles, History } from "lucide-react"
+const unwrap = <T,>(res: any): T => (res?.data?.data ?? res?.data ?? res) as T
 
 export function StoryWorkspacePage() {
-  return (
-    <AppShell>
-      <PageContainer maxWidth="7xl">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-display font-bold">The Return - Story Workspace</h1>
-            <div className="flex items-center gap-3 mt-2">
-              <Badge variant="studio">Nigerian Drama</Badge>
-              <span className="text-sm text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> 12 min • 2,450 words</span>
-              <span className="text-sm text-muted-foreground flex items-center gap-1"><Users className="h-3 w-3" /> 3 characters</span>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline"><History className="mr-2 h-4 w-4" /> Versions</Button>
-            <Button variant="studio"><Save className="mr-2 h-4 w-4" /> Save</Button>
-          </div>
-        </div>
-
-        <Tabs defaultValue="full">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="full">Full Story</TabsTrigger>
-            <TabsTrigger value="script">Script</TabsTrigger>
-            <TabsTrigger value="dialogue">Dialogue</TabsTrigger>
-            <TabsTrigger value="characters">Characters</TabsTrigger>
-            <TabsTrigger value="locations">Locations</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview" className="space-y-6 mt-6">
-            <div className="grid md:grid-cols-3 gap-6">
-              <Card className="md:col-span-2">
-                <CardHeader><CardTitle>Synopsis</CardTitle></CardHeader>
-                <CardContent>
-                  <p className="text-sm leading-relaxed text-muted-foreground">
-                    Emeka, a 32-year-old Nigerian-American software engineer, receives news that his estranged father is ill. He returns to his hometown after 15 years to find family secrets, cultural conflicts, and a chance for redemption. Set in Anambra with authentic Igbo traditions, the story explores diaspora identity, family honor, and homecoming.
-                  </p>
-                  <div className="mt-6 grid grid-cols-2 gap-4">
-                    <div className="p-3 rounded-xl bg-muted/50"><div className="text-xs text-muted-foreground">GENRE</div><div className="font-medium">Drama, Family</div></div>
-                    <div className="p-3 rounded-xl bg-muted/50"><div className="text-xs text-muted-foreground">TONE</div><div className="font-medium">Emotional, Reflective</div></div>
-                    <div className="p-3 rounded-xl bg-muted/50"><div className="text-xs text-muted-foreground">AUDIENCE</div><div className="font-medium">Adults 25-45, Diaspora</div></div>
-                    <div className="p-3 rounded-xl bg-muted/50"><div className="text-xs text-muted-foreground">ENDING</div><div className="font-medium">Hopeful Reconciliation</div></div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader><CardTitle className="text-base">Quick Stats</CardTitle></CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  <div className="flex justify-between"><span>Word Count</span><span>2,450</span></div>
-                  <div className="flex justify-between"><span>Scenes</span><span>12</span></div>
-                  <div className="flex justify-between"><span>Characters</span><span>3</span></div>
-                  <div className="flex justify-between"><span>Dialogue Lines</span><span>24</span></div>
-                  <div className="flex justify-between"><span>Est. Duration</span><span>12 min</span></div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="full" className="mt-6">
-            <Card>
-              <CardContent className="p-8">
-                <div className="prose prose-sm max-w-none">
-                  <h3>CHAPTER 1: THE CALL</h3>
-                  <p>The phone rang at 3:47 AM. Emeka stared at the screen - Mama. His mother never called at this hour unless...</p>
-                  <p>"Emeka, your father..." Her voice cracked. "He is asking for you."</p>
-                  <p>Fifteen years. Fifteen years since he left the village with a scholarship and a promise to return...</p>
-                  <h3 className="mt-8">CHAPTER 2: HOMECOMING</h3>
-                  <p>Murtala Muhammed Airport smelled the same - heat, diesel, and possibility. Lagos had grown while he was gone...</p>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="script" className="mt-6">
-            <Card className="p-6">
-              <div className="space-y-4 font-mono text-sm">
-                <div className="p-3 rounded bg-muted/30"><span className="text-muted-foreground">INT. NEW YORK APARTMENT - NIGHT</span><br/>EMEKA (32) sits up in bed, phone light on face.<br/><br/>EMEKA<br/>Mama? What happened?</div>
-              </div>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="characters" className="mt-6">
-            <div className="grid md:grid-cols-3 gap-4">
-              {[
-                { name: "Emeka Okafor", role: "Protagonist", age: 32 },
-                { name: "Papa Okafor", role: "Supporting", age: 68 },
-                { name: "Adaeze", role: "Supporting", age: 28 },
-              ].map(c => (
-                <Card key={c.name} className="p-4"><div className="font-medium">{c.name}</div><div className="text-xs text-muted-foreground">{c.role} • {c.age}yo</div></Card>
-              ))}
-            </div>
-          </TabsContent>
-        </Tabs>
-      </PageContainer>
-    </AppShell>
-  )
+  const { id } = useParams(); const navigate = useNavigate(); const { success, error } = useToast()
+  const [story, setStory] = useState<Story | null>(null); const [versions, setVersions] = useState<Story[]>([]); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [rewrite, setRewrite] = useState(''); const [doctor, setDoctor] = useState<{score:number;issues:string[];suggestions:string[]}|null>(null)
+  const load = useCallback(async () => { if (!id) return; setLoading(true); try { const s=await getStoryService(); const result=unwrap<Story>(await s.getStory(id)); setStory(result); } catch(e:any){ error('Unable to load story', e?.message || 'Story not found') } finally { setLoading(false) } }, [id])
+  useEffect(()=>{ load() },[load])
+  const save = async () => { if(!id||!story)return; setSaving(true); try { const s=await getStoryService(); setStory(unwrap<Story>(await s.updateStory(id,{title:story.title,logline:story.logline,synopsis:story.synopsis,fullStory:story.fullStory}))); success('Saved','Story changes saved successfully.') } catch(e:any){error('Save failed',e?.message||'Unable to save')} finally{setSaving(false)} }
+  const loadVersions = async () => { if(!id)return; try { setVersions(unwrap<Story[]>(await (await getStoryService()).getVersions(id)) || []) } catch(e:any){error('Versions unavailable',e?.message||'Unable to load versions')} }
+  const runRewrite = async () => { if(!id||!rewrite.trim())return; try { await (await getStoryService()).rewrite(id,rewrite,story?.fullStory); success('Rewrite requested','The AI rewrite has been submitted. Refreshing story...'); setRewrite(''); setTimeout(load,1000) } catch(e:any){error('Rewrite failed',e?.message||'Unable to rewrite story')} }
+  const runDoctor = async () => { if(!id)return; try { setDoctor(unwrap(await (await getStoryService()).doctorAnalyze(id))); success('Story Doctor complete','Quality analysis is ready.') } catch(e:any){error('Analysis failed',e?.message||'Unable to analyze story')} }
+  const restore = async (versionId:string) => { if(!id)return; try { setStory(unwrap<Story>(await (await getStoryService()).restoreVersion(id,versionId))); success('Version restored','The selected version is now current.') } catch(e:any){error('Restore failed',e?.message||'Unable to restore version')} }
+  if(loading)return <AppShell><PageContainer maxWidth="7xl"><div className="py-20 text-center text-muted-foreground">Loading Story Workspace…</div></PageContainer></AppShell>
+  if(!story)return <AppShell><PageContainer maxWidth="7xl"><Card className="p-10 text-center"><h2 className="text-xl font-semibold">No story found</h2><Button className="mt-4" onClick={()=>navigate('/studio/story')}>Create a Story</Button></Card></PageContainer></AppShell>
+  return <AppShell><PageContainer maxWidth="7xl">
+    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6"><div><h1 className="text-3xl font-display font-bold">{story.title}</h1><div className="flex flex-wrap items-center gap-3 mt-2"><Badge variant="studio">{story.culturalMode} • {story.genre}</Badge><span className="text-sm text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3"/>{story.estimatedDuration} min • {story.wordCount} words</span></div></div><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={loadVersions}><History className="mr-2 h-4 w-4"/> Versions</Button><Button variant="outline" onClick={runDoctor}><Stethoscope className="mr-2 h-4 w-4"/> Story Doctor</Button><Button variant="studio" onClick={save} isLoading={saving}><Save className="mr-2 h-4 w-4"/> Save</Button></div></div>
+    <Tabs defaultValue="full"><TabsList><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="full">Full Story</TabsTrigger><TabsTrigger value="rewrite">AI Rewrite</TabsTrigger><TabsTrigger value="versions">Versions</TabsTrigger><TabsTrigger value="doctor">Doctor</TabsTrigger></TabsList>
+      <TabsContent value="overview" className="mt-6 space-y-6"><Card><CardHeader><CardTitle>Story Details</CardTitle></CardHeader><CardContent className="space-y-4"><Textarea label="Title" value={story.title} onChange={e=>setStory({...story,title:e.target.value})}/><Textarea label="Logline" value={story.logline} onChange={e=>setStory({...story,logline:e.target.value})} rows={2}/><Textarea label="Synopsis" value={story.synopsis} onChange={e=>setStory({...story,synopsis:e.target.value})} rows={5}/><div className="grid md:grid-cols-3 gap-4 text-sm"><div className="p-4 rounded-xl bg-muted/50"><Users className="h-4 w-4 mb-2"/>Characters are ready for the next studio phase.</div><div className="p-4 rounded-xl bg-muted/50"><FileText className="h-4 w-4 mb-2"/>Versioned story editing enabled.</div><div className="p-4 rounded-xl bg-muted/50"><Sparkles className="h-4 w-4 mb-2"/>AI rewrite and Story Doctor connected.</div></div></CardContent></Card></TabsContent>
+      <TabsContent value="full" className="mt-6"><Card><CardHeader><CardTitle>Full Story</CardTitle></CardHeader><CardContent><Textarea value={story.fullStory} onChange={e=>setStory({...story,fullStory:e.target.value})} rows={28} className="font-serif leading-7"/><p className="text-xs text-muted-foreground mt-2">Edits are versioned when saved.</p></CardContent></Card></TabsContent>
+      <TabsContent value="rewrite" className="mt-6"><Card><CardHeader><CardTitle>AI Rewrite Studio</CardTitle></CardHeader><CardContent className="space-y-4"><Textarea label="Rewrite instruction" value={rewrite} onChange={e=>setRewrite(e.target.value)} rows={5} placeholder="Make the opening more emotional, improve dialogue, shorten the middle, etc."/><Button variant="studio" onClick={runRewrite} disabled={!rewrite.trim()}><Sparkles className="mr-2 h-4 w-4"/> Rewrite with AI</Button></CardContent></Card></TabsContent>
+      <TabsContent value="versions" className="mt-6"><Card><CardHeader><CardTitle>Version History</CardTitle></CardHeader><CardContent>{versions.length===0?<Button variant="outline" onClick={loadVersions}>Load versions</Button>:<div className="space-y-3">{versions.map((v:any)=><div key={v.id} className="flex items-center justify-between p-4 rounded-xl bg-muted/40"><div><div className="font-medium">Version {v.version}</div><div className="text-xs text-muted-foreground">{v.changeNotes||'Saved story version'} • {v.createdAt?new Date(v.createdAt).toLocaleString():''}</div></div><Button variant="outline" size="sm" onClick={()=>restore(v.id)}><RotateCcw className="mr-2 h-4 w-4"/> Restore</Button></div>)}</div>}</CardContent></Card></TabsContent>
+      <TabsContent value="doctor" className="mt-6"><Card><CardHeader><CardTitle>Story Doctor</CardTitle></CardHeader><CardContent>{!doctor?<Button variant="studio" onClick={runDoctor}><Stethoscope className="mr-2 h-4 w-4"/> Analyze Story</Button>:<div className="space-y-5"><div className="text-4xl font-bold">{doctor.score}/100</div><div><h4 className="font-semibold">Issues</h4>{doctor.issues.length?<ul className="list-disc pl-5 text-sm text-muted-foreground">{doctor.issues.map((x,i)=><li key={i}>{x}</li>)}</ul>:<p className="text-sm text-muted-foreground">No major issues detected.</p>}</div><div><h4 className="font-semibold">Suggestions</h4><ul className="list-disc pl-5 text-sm text-muted-foreground">{doctor.suggestions.map((x,i)=><li key={i}>{x}</li>)}</ul></div></div>}</CardContent></Card></TabsContent>
+    </Tabs>
+  </PageContainer></AppShell>
 }
