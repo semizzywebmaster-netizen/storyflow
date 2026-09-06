@@ -14,6 +14,7 @@ import { sceneRoutes } from './routes/scene.routes'
 import { imageRoutes } from './routes/image.routes'
 import { voiceRoutes } from './routes/voice.routes'
 import { sfxRoutes } from './routes/sfx.routes'
+import { videoRoutes } from './routes/video.routes'
 import { assetRoutes } from './routes/asset.routes'
 import { generationRoutes } from './routes/generation.routes'
 import { creditRoutes } from './routes/credit.routes'
@@ -42,6 +43,7 @@ app.use('/api/scenes', sceneRoutes)
 app.use('/api/images', imageRoutes)
 app.use('/api/voice', voiceRoutes)
 app.use('/api/sfx', sfxRoutes)
+app.use('/api/videos', videoRoutes)
 app.use('/api/assets', assetRoutes)
 app.use('/api/generations', generationRoutes)
 app.use('/api/credits', creditRoutes)
