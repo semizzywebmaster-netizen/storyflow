@@ -112,9 +112,13 @@ router.post('/render', async (req: AuthRequest, res, next) => {
       params
     )
     if (!scenes.rows.length) return next(createError('No scene images are available for this project. Generate scene images before rendering.', 400))
-    await query(`INSERT INTO generations (id,user_id,project_id,type,status,credits_reserved,metadata) VALUES ($1,$2,$3,'VIDEO','PENDING',$4,$5)`, [generationId, userId, projectId, VIDEO_CREDITS, JSON.stringify({ sceneCount: scenes.rows.length })])
+
+    // Reserve credits before creating the generation record so every successful
+    // reservation is either represented by a generation or safely released on error.
     await creditService.reserveCredits(userId, VIDEO_CREDITS, generationId, 'StoryFlow video render')
+    await query(`INSERT INTO generations (id,user_id,project_id,type,status,credits_reserved,metadata) VALUES ($1,$2,$3,'VIDEO','PENDING',$4,$5)`, [generationId, userId, projectId, VIDEO_CREDITS, JSON.stringify({ sceneCount: scenes.rows.length })])
     await query(`UPDATE generations SET status='PROCESSING',updated_at=NOW() WHERE id=$1`, [generationId])
+
     const concatLines: string[] = []
     for (let i = 0; i < scenes.rows.length; i++) {
       const filename = join(workDir, `scene-${i}.jpg`)
