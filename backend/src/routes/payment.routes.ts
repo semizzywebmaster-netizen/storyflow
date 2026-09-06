@@ -20,6 +20,21 @@ function secureEqual(a: string, b: string) {
   return left.length === right.length && crypto.timingSafeEqual(left, right)
 }
 
+function validateCallbackUrl(value: unknown): string | undefined {
+  if (value == null || value === '') return undefined
+  if (typeof value !== 'string') throw createError('callbackUrl must be a valid URL', 400)
+  try {
+    const requested = new URL(value)
+    const frontend = new URL(config.frontendUrl)
+    if (requested.protocol !== 'https:' && frontend.protocol === 'https:') throw createError('callbackUrl must use HTTPS', 400)
+    if (requested.origin !== frontend.origin) throw createError('callbackUrl must belong to the configured frontend origin', 400)
+    return requested.toString()
+  } catch (error) {
+    if (error instanceof Error && 'statusCode' in error) throw error
+    throw createError('callbackUrl must be a valid URL on the configured frontend origin', 400)
+  }
+}
+
 async function finalizeWalletPayment(provider: string, reference: string, amount: number, metadata: any = {}) {
   const client = await pool.connect()
   try {
@@ -46,35 +61,40 @@ async function finalizeWalletPayment(provider: string, reference: string, amount
 }
 
 router.post('/initialize', authenticate, async (req: AuthRequest, res, next) => {
+  let reference: string | null = null
   try {
     const { amount, provider = 'PAYSTACK', callbackUrl } = req.body ?? {}
     const numericAmount = Number(amount)
     const normalizedProvider = String(provider).toUpperCase()
     if (!Number.isFinite(numericAmount) || numericAmount < 100) return next(createError('amount must be at least ₦100', 400))
     if (!['PAYSTACK', 'FLUTTERWAVE'].includes(normalizedProvider)) return next(createError('Unsupported payment provider', 400))
+    const safeCallbackUrl = validateCallbackUrl(callbackUrl)
     if (normalizedProvider === 'PAYSTACK' && !config.payments.paystackSecretKey) return next(createError('Paystack is not configured', 503))
     if (normalizedProvider === 'FLUTTERWAVE' && !config.payments.flutterwaveSecretKey) return next(createError('Flutterwave is not configured', 503))
 
     const user = await query('SELECT email,display_name FROM users WHERE id=$1 AND is_active=TRUE AND deleted_at IS NULL', [req.user!.id])
     if (!user.rows.length) return next(createError('User account not found', 404))
-    const reference = `SF-${Date.now()}-${randomUUID().slice(0, 8)}`
+    reference = `SF-${Date.now()}-${randomUUID().slice(0, 8)}`
     const idempotencyKey = randomUUID()
-    await query(`INSERT INTO payments (user_id,amount,currency,provider,provider_reference,idempotency_key,type,status,metadata) VALUES ($1,$2,'NGN',$3,$4,$5,'WALLET_FUND','PENDING',$6)`, [req.user!.id, numericAmount, normalizedProvider, reference, idempotencyKey, JSON.stringify({ callbackUrl: callbackUrl || null })])
+    await query(`INSERT INTO payments (user_id,amount,currency,provider,provider_reference,idempotency_key,type,status,metadata) VALUES ($1,$2,'NGN',$3,$4,$5,'WALLET_FUND','PENDING',$6)`, [req.user!.id, numericAmount, normalizedProvider, reference, idempotencyKey, JSON.stringify({ callbackUrl: safeCallbackUrl || null })])
 
     let paymentUrl: string
     if (normalizedProvider === 'PAYSTACK') {
-      const response = await fetch('https://api.paystack.co/transaction/initialize', { method: 'POST', headers: authHeaders('PAYSTACK'), body: JSON.stringify({ email: user.rows[0].email, amount: Math.round(numericAmount * 100), reference, callback_url: callbackUrl }) })
+      const response = await fetch('https://api.paystack.co/transaction/initialize', { method: 'POST', headers: authHeaders('PAYSTACK'), body: JSON.stringify({ email: user.rows[0].email, amount: Math.round(numericAmount * 100), reference, ...(safeCallbackUrl ? { callback_url: safeCallbackUrl } : {}) }) })
       const body = await response.json() as any
-      if (!response.ok || !body.status) throw new Error(body.message || 'Paystack initialization failed')
+      if (!response.ok || !body.status || typeof body.data?.authorization_url !== 'string') throw new Error(body.message || 'Paystack initialization failed')
       paymentUrl = body.data.authorization_url
     } else {
-      const response = await fetch('https://api.flutterwave.com/v3/payments', { method: 'POST', headers: authHeaders('FLUTTERWAVE'), body: JSON.stringify({ tx_ref: reference, amount: numericAmount, currency: 'NGN', redirect_url: callbackUrl, customer: { email: user.rows[0].email, name: user.rows[0].display_name || user.rows[0].email }, customizations: { title: 'StoryFlow Wallet Funding' } }) })
+      const response = await fetch('https://api.flutterwave.com/v3/payments', { method: 'POST', headers: authHeaders('FLUTTERWAVE'), body: JSON.stringify({ tx_ref: reference, amount: numericAmount, currency: 'NGN', ...(safeCallbackUrl ? { redirect_url: safeCallbackUrl } : {}), customer: { email: user.rows[0].email, name: user.rows[0].display_name || user.rows[0].email }, customizations: { title: 'StoryFlow Wallet Funding' } }) })
       const body = await response.json() as any
-      if (!response.ok || body.status !== 'success') throw new Error(body.message || 'Flutterwave initialization failed')
+      if (!response.ok || body.status !== 'success' || typeof body.data?.link !== 'string') throw new Error(body.message || 'Flutterwave initialization failed')
       paymentUrl = body.data.link
     }
     return res.status(201).json({ success: true, data: { reference, provider: normalizedProvider, paymentUrl, amount: numericAmount } })
-  } catch (error) { next(error) }
+  } catch (error) {
+    if (reference) await query(`UPDATE payments SET status='FAILED',updated_at=NOW() WHERE provider_reference=$1 AND status='PENDING'`, [reference]).catch(() => undefined)
+    next(error)
+  }
 })
 
 router.post('/verify', authenticate, async (req: AuthRequest, res, next) => {
