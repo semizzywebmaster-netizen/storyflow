@@ -1,10 +1,9 @@
-
 import { Pool } from 'pg'
 import { config } from '../config'
 
 export const pool = new Pool({
   connectionString: config.databaseUrl,
-  ssl: config.nodeEnv === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: config.nodeEnv === 'production' ? { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false' } : false,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
