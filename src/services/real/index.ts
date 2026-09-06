@@ -35,30 +35,33 @@ export const realProjectService = {
 }
 
 /**
- * Story generation service.
- * The browser only talks to our backend API; AI provider credentials must
- * remain server-side. Generation and credit enforcement therefore happen on
- * the backend, not in React.
+ * Production story generation service.
+ * AI provider credentials and credit enforcement remain server-side.
  */
 export const realStoryService = {
   generate: (projectId: string, prompt: string, options: any) =>
-    apiClient.post('/generations/story', {
+    apiClient.post('/stories/generate', {
       projectId,
       prompt,
-      ...options,
+      genre: options.genre,
+      tone: options.tone,
+      lengthMinutes: options.length === 'short' ? 5 : options.length === 'long' ? 30 : 15,
+      language: options.language || 'en',
+      culturalMode: options.culturalMode,
+      targetAudience: options.targetAudience,
     }),
-  getStory: (projectId: string) => apiClient.get(`/projects/${projectId}/story`),
-  updateStory: (projectId: string, data: any) => apiClient.put(`/projects/${projectId}/story`, data),
+  getStory: (projectId: string) => apiClient.get(`/stories/project/${projectId}`),
+  updateStory: (projectId: string, data: any) => apiClient.put(`/stories/project/${projectId}`, data),
   rewrite: (projectId: string, instruction: string, selection?: string) =>
-    apiClient.post(`/generations/story/${projectId}/rewrite`, { instruction, selection }),
-  getVersions: (projectId: string) => apiClient.get(`/projects/${projectId}/story/versions`),
+    apiClient.post(`/stories/project/${projectId}/rewrite`, { instruction, selection }),
+  getVersions: (projectId: string) => apiClient.get(`/stories/project/${projectId}/versions`),
   restoreVersion: (projectId: string, versionId: string) =>
-    apiClient.post(`/projects/${projectId}/story/versions/${versionId}/restore`),
-  doctorAnalyze: (projectId: string) => apiClient.post(`/projects/${projectId}/story/doctor`),
+    apiClient.post(`/stories/project/${projectId}/versions/${versionId}/restore`),
+  doctorAnalyze: (projectId: string) => apiClient.post(`/stories/project/${projectId}/doctor`),
 }
 
 export const realGenerationService = {
-  generateStory: (data: any) => apiClient.post('/generations/story', data),
+  generateStory: (data: any) => apiClient.post('/stories/generate', data),
   generateImage: (data: any) => apiClient.post('/generations/image', data),
   generateVoice: (data: any) => apiClient.post('/generations/voice', data),
   generateVideo: (data: any) => apiClient.post('/generations/video', data),
