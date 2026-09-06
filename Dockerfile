@@ -1,30 +1,35 @@
-# AI Story Studio - Full Stack Dockerfile
-# For combined frontend + backend deployment (alternative to separate)
+# StoryFlow production backend image
+# FFmpeg is required for server-side video rendering.
 
-# Backend stage
-FROM node:20-slim AS backend
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+FROM node:20-slim AS build
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ffmpeg \
+  && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app/backend
 COPY backend/package*.json ./
-RUN npm install
+RUN npm ci
 COPY backend/ ./
-RUN npm run build || npx tsc
+RUN npm run build
 
-# Frontend stage
-FROM node:20-slim AS frontend
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . ./
-RUN npm run build || echo "Frontend build requires vite"
+FROM node:20-slim AS production
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ffmpeg \
+  && rm -rf /var/lib/apt/lists/* \
+  && groupadd --system --gid 1001 storyflow \
+  && useradd --system --uid 1001 --gid storyflow --create-home storyflow
 
-# Production stage
-FROM node:20-slim
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
-WORKDIR /app
-COPY --from=backend /app/backend/dist ./backend/dist
-COPY --from=backend /app/backend/package*.json ./backend/
-COPY --from=frontend /app/dist ./dist
-COPY --from=backend /app/backend/node_modules ./backend/node_modules
+WORKDIR /app/backend
+ENV NODE_ENV=production
+
+COPY --from=build --chown=storyflow:storyflow /app/backend/package*.json ./
+COPY --from=build --chown=storyflow:storyflow /app/backend/node_modules ./node_modules
+COPY --from=build --chown=storyflow:storyflow /app/backend/dist ./dist
+
+USER storyflow
 EXPOSE 5000
-CMD ["node", "backend/dist/server.js"]
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:5000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+
+CMD ["node", "dist/server.js"]
