@@ -9,7 +9,7 @@ import { AppShell } from '@/components/layout/AppShell'
 import { Mic, Play, Download, Loader2, RefreshCw } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { realVoiceService } from '@/services/real'
-import { useToast } from '@/hooks/use-toast'
+import { useToast } from '@/hooks/useToast'
 
 type Voice = { id: string; name: string; category?: string | null; labels?: Record<string, string>; previewUrl?: string | null }
 type Project = { id: string; name: string }
@@ -58,7 +58,7 @@ export function VoiceStudioPage() {
       const res: any = await realVoiceService.getHistory(id)
       const data = res.data
       const rows = Array.isArray(data) ? data : data?.data ?? []
-      setAssets(rows.filter((asset: Asset) => asset.metadata?.voiceId || asset.mime_type?.startsWith?.('audio/') || asset.type === 'AUDIO'))
+      setAssets(rows.filter((asset: Asset) => asset.metadata?.voiceId || (asset as any).mime_type?.startsWith?.('audio/') || (asset as any).type === 'AUDIO'))
     } catch { setAssets([]) }
   }
 
