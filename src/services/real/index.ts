@@ -34,10 +34,6 @@ export const realProjectService = {
   deleteProject: (id: string) => apiClient.delete(`/projects/${id}`),
 }
 
-/**
- * Production story generation service.
- * AI provider credentials and credit enforcement remain server-side.
- */
 export const realStoryService = {
   generate: (projectId: string, prompt: string, options: any) =>
     apiClient.post('/stories/generate', {
@@ -58,6 +54,19 @@ export const realStoryService = {
   restoreVersion: (projectId: string, versionId: string) =>
     apiClient.post(`/stories/project/${projectId}/versions/${versionId}/restore`),
   doctorAnalyze: (projectId: string) => apiClient.post(`/stories/project/${projectId}/doctor`),
+}
+
+/** Production Character Bible API. */
+export const realCharacterService = {
+  list: (projectId: string) => apiClient.get(`/characters/project/${projectId}`),
+  getById: (_projectId: string, characterId: string) => apiClient.get(`/characters/${characterId}`),
+  create: (projectId: string, data: any) => apiClient.post('/characters', { projectId, ...data }),
+  update: (_projectId: string, characterId: string, data: any) => apiClient.put(`/characters/${characterId}`, data),
+  delete: (_projectId: string, characterId: string) => apiClient.delete(`/characters/${characterId}`),
+  generate: (projectId: string, prompt: string) => apiClient.post('/characters/generate-bible', { projectId, prompt, characterCount: 4 }),
+  lockCharacter: (_projectId: string, characterId: string) => apiClient.put(`/characters/${characterId}/lock`),
+  unlockCharacter: (_projectId: string, characterId: string) => apiClient.put(`/characters/${characterId}/unlock`),
+  generateReference: () => Promise.reject(new Error('Character reference generation is not available yet')),
 }
 
 export const realGenerationService = {
