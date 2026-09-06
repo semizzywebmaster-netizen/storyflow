@@ -1,8 +1,7 @@
-
 /**
- * Real Services - Phase 71 Frontend ↔ Backend Integration
- * Replace mock API calls with real backend where production exists
- * Maintains same interface as mocks - service contracts enforced
+ * Real Services - Frontend ↔ Backend Integration
+ * Service contracts mirror the domain interfaces so production does not
+ * silently fall back to demo story data.
  */
 
 import { apiClient } from '@/lib/api-client'
@@ -11,7 +10,6 @@ export const realAuthService = {
   login: async (email: string, password: string) => {
     const res = await apiClient.post('/auth/login', { email, password }, { skipAuth: true })
     if (res.data) {
-      // Store token
       const token = (res.data as any).token || (res.data as any).accessToken
       if (token) localStorage.setItem('auth_token', token)
     }
@@ -36,13 +34,35 @@ export const realProjectService = {
   deleteProject: (id: string) => apiClient.delete(`/projects/${id}`),
 }
 
+/**
+ * Story generation service.
+ * The browser only talks to our backend API; AI provider credentials must
+ * remain server-side. Generation and credit enforcement therefore happen on
+ * the backend, not in React.
+ */
+export const realStoryService = {
+  generate: (projectId: string, prompt: string, options: any) =>
+    apiClient.post('/generations/story', {
+      projectId,
+      prompt,
+      ...options,
+    }),
+  getStory: (projectId: string) => apiClient.get(`/projects/${projectId}/story`),
+  updateStory: (projectId: string, data: any) => apiClient.put(`/projects/${projectId}/story`, data),
+  rewrite: (projectId: string, instruction: string, selection?: string) =>
+    apiClient.post(`/generations/story/${projectId}/rewrite`, { instruction, selection }),
+  getVersions: (projectId: string) => apiClient.get(`/projects/${projectId}/story/versions`),
+  restoreVersion: (projectId: string, versionId: string) =>
+    apiClient.post(`/projects/${projectId}/story/versions/${versionId}/restore`),
+  doctorAnalyze: (projectId: string) => apiClient.post(`/projects/${projectId}/story/doctor`),
+}
+
 export const realGenerationService = {
   generateStory: (data: any) => apiClient.post('/generations/story', data),
   generateImage: (data: any) => apiClient.post('/generations/image', data),
   generateVoice: (data: any) => apiClient.post('/generations/voice', data),
   generateVideo: (data: any) => apiClient.post('/generations/video', data),
   getJob: (id: string) => apiClient.get(`/generations/job/${id}`),
-  // Advanced AI
   generateContentFactory: (data: any) => apiClient.post('/advanced/content-factory', data),
   generateSeriesEpisode: (seriesId: string, data: any) => apiClient.post(`/advanced/series/${seriesId}/episode`, data),
   generateAutoClips: (data: any) => apiClient.post('/advanced/auto-clips', data),
