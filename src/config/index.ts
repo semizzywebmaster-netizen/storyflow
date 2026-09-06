@@ -1,8 +1,10 @@
 export const appConfig = {
   name: import.meta.env.VITE_APP_NAME || 'AI Story Studio',
-  version: import.meta.env.VITE_APP_VERSION || '0.0.0',
-  apiUrl: import.meta.env.VITE_API_URL || 'http://localhost:3000/api',
-  enableMock: import.meta.env.VITE_ENABLE_MOCK !== 'false',
+  version: import.meta.env.VITE_APP_VERSION || '1.0.0',
+  apiUrl: import.meta.env.VITE_API_URL || '/api',
+  // Mock mode must be explicitly enabled. This prevents production from silently
+  // running with demo data when VITE_ENABLE_MOCK is missing.
+  enableMock: import.meta.env.VITE_ENABLE_MOCK === 'true',
   enablePwa: import.meta.env.VITE_ENABLE_PWA !== 'false',
   enableAnalytics: import.meta.env.VITE_ENABLE_ANALYTICS === 'true',
   env: import.meta.env.MODE,
@@ -23,7 +25,7 @@ export const appConfig = {
 
   // Storage keys
   storageKeys: {
-    authToken: 'studio_auth_token',
+    authToken: 'auth_token',
     refreshToken: 'studio_refresh_token',
     user: 'studio_user',
     theme: 'studio_theme',
