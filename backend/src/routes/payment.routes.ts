@@ -14,6 +14,12 @@ function authHeaders(provider: 'PAYSTACK' | 'FLUTTERWAVE') {
     : { Authorization: `Bearer ${config.payments.flutterwaveSecretKey}`, 'Content-Type': 'application/json' }
 }
 
+function secureEqual(a: string, b: string) {
+  const left = Buffer.from(a, 'utf8')
+  const right = Buffer.from(b, 'utf8')
+  return left.length === right.length && crypto.timingSafeEqual(left, right)
+}
+
 async function finalizeWalletPayment(provider: string, reference: string, amount: number, metadata: any = {}) {
   const client = await pool.connect()
   try {
@@ -105,8 +111,10 @@ router.post('/verify', authenticate, async (req: AuthRequest, res, next) => {
 router.post('/webhook/paystack', async (req, res, next) => {
   try {
     const signature = String(req.headers['x-paystack-signature'] || '')
-    const expected = crypto.createHmac('sha512', config.payments.paystackSecretKey).update(JSON.stringify(req.body)).digest('hex')
-    if (!signature || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return res.status(401).json({ success: false })
+    const rawBody = (req as any).rawBody as Buffer | undefined
+    if (!config.payments.paystackSecretKey || !signature || !rawBody) return res.status(401).json({ success: false })
+    const expected = crypto.createHmac('sha512', config.payments.paystackSecretKey).update(rawBody).digest('hex')
+    if (!secureEqual(signature, expected)) return res.status(401).json({ success: false })
     if (req.body?.event === 'charge.success') {
       const reference = req.body?.data?.reference
       const amount = Number(req.body?.data?.amount) / 100
