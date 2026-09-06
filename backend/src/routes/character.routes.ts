@@ -21,7 +21,7 @@ router.get('/project/:projectId', async (req: AuthRequest, res, next) => {
 
 router.post('/', async (req: AuthRequest, res, next) => {
   try {
-    const { projectId, name, description, traits, appearance } = req.body ?? {}
+    const { projectId, name, role, age, gender, appearance, personality, background, clothingStyle, skinTone, hairStyle } = req.body ?? {}
     if (!projectId || !name?.trim()) return next(createError('projectId and name are required', 400))
 
     const project = await query(
@@ -31,10 +31,11 @@ router.post('/', async (req: AuthRequest, res, next) => {
     if (project.rows.length === 0) return next(createError('Project not found', 404))
 
     const result = await query(
-      `INSERT INTO characters (project_id, name, description, traits, appearance)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO characters
+       (project_id, name, role, age, gender, appearance, personality, background, clothing_style, skin_tone, hair_style)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
-      [projectId, name.trim(), description ?? null, traits ?? null, appearance ?? null]
+      [projectId, name.trim(), role ?? null, age ?? null, gender ?? null, appearance ?? null, personality ?? null, background ?? null, clothingStyle ?? null, skinTone ?? null, hairStyle ?? null]
     )
     return res.status(201).json({ success: true, data: result.rows[0] })
   } catch (error) { next(error) }
