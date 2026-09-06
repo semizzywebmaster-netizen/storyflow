@@ -10,6 +10,7 @@ import { authenticate, AuthRequest } from '../middleware/auth'
 import { createError } from '../middleware/errorHandler'
 import { creditService } from '../services/creditService'
 import { storageService } from '../services/storageService'
+import { config } from '../config'
 
 const execFileAsync = promisify(execFile)
 const router = Router()
@@ -24,24 +25,25 @@ async function verifyProject(userId: string, projectId: string) {
   if (!result.rows.length) throw createError('Project not found', 404)
 }
 
-async function ensureTimelineTable() {
-  await query(`
-    CREATE TABLE IF NOT EXISTS video_timelines (
-      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-      project_id UUID REFERENCES projects(id) ON DELETE CASCADE UNIQUE NOT NULL,
-      user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-      timeline JSONB NOT NULL DEFAULT '{"tracks":[]}'::jsonb,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `)
+function isTrustedAssetUrl(value: string): boolean {
+  try {
+    const asset = new URL(value)
+    const publicBase = new URL(config.r2.publicUrl)
+    const basePath = publicBase.pathname.replace(/\/$/, '')
+    return asset.protocol === 'https:' && asset.origin === publicBase.origin && asset.pathname.startsWith(`${basePath}/`)
+  } catch {
+    return false
+  }
 }
 
 async function downloadAsset(url: string, destination: string) {
-  const response = await fetch(url)
+  if (!isTrustedAssetUrl(url)) throw new Error('Video rendering rejected an untrusted source asset URL')
+  const response = await fetch(url, { signal: AbortSignal.timeout(60000) })
   if (!response.ok) throw new Error(`Unable to download source asset (${response.status})`)
   const contentType = response.headers.get('content-type') || ''
   if (!contentType.startsWith('image/')) throw new Error('Video rendering requires image assets')
+  const contentLength = Number(response.headers.get('content-length') || 0)
+  if (contentLength > 25 * 1024 * 1024) throw new Error('Source image exceeds the 25MB render limit')
   const buffer = Buffer.from(await response.arrayBuffer())
   if (buffer.length > 25 * 1024 * 1024) throw new Error('Source image exceeds the 25MB render limit')
   await writeFile(destination, buffer)
@@ -52,7 +54,6 @@ router.get('/timeline/:projectId', async (req: AuthRequest, res, next) => {
     const userId = req.user!.id
     const projectId = req.params.projectId
     await verifyProject(userId, projectId)
-    await ensureTimelineTable()
     const result = await query('SELECT timeline,updated_at AS "updatedAt" FROM video_timelines WHERE project_id=$1 AND user_id=$2', [projectId, userId])
     if (result.rows.length) return res.json({ success: true, data: result.rows[0] })
 
@@ -73,7 +74,6 @@ router.put('/timeline/:projectId', async (req: AuthRequest, res, next) => {
     const userId = req.user!.id
     const projectId = req.params.projectId
     await verifyProject(userId, projectId)
-    await ensureTimelineTable()
     const incoming = req.body?.timeline ?? req.body
     if (!incoming || typeof incoming !== 'object') return next(createError('timeline is required', 400))
     if (!Array.isArray(incoming.tracks)) return next(createError('timeline.tracks must be an array', 400))
@@ -113,8 +113,6 @@ router.post('/render', async (req: AuthRequest, res, next) => {
     )
     if (!scenes.rows.length) return next(createError('No scene images are available for this project. Generate scene images before rendering.', 400))
 
-    // Reserve credits before creating the generation record so every successful
-    // reservation is either represented by a generation or safely released on error.
     await creditService.reserveCredits(userId, VIDEO_CREDITS, generationId, 'StoryFlow video render')
     await query(`INSERT INTO generations (id,user_id,project_id,type,status,credits_reserved,metadata) VALUES ($1,$2,$3,'VIDEO','PENDING',$4,$5)`, [generationId, userId, projectId, VIDEO_CREDITS, JSON.stringify({ sceneCount: scenes.rows.length })])
     await query(`UPDATE generations SET status='PROCESSING',updated_at=NOW() WHERE id=$1`, [generationId])
