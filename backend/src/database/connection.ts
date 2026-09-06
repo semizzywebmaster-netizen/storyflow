@@ -21,6 +21,10 @@ export const query = async (text: string, params?: any[]) => {
   const start = Date.now()
   const res = await pool.query(text, params)
   const duration = Date.now() - start
-  console.log('[DB] Executed query', { text: text.substring(0, 100), duration, rows: res.rowCount })
+  if (config.nodeEnv !== 'production') {
+    console.log('[DB] Executed query', { text: text.substring(0, 100), duration, rows: res.rowCount })
+  } else if (duration >= 1000) {
+    console.warn('[DB] Slow query', { duration, rows: res.rowCount })
+  }
   return res
 }
