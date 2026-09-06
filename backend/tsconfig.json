@@ -19,7 +19,7 @@
     "node_modules",
     "dist",
     "src/__tests__/**",
-    "src/**/_1.ts",
+    "src/**/*_1.ts",
     "src/server_1.ts",
     "src/routes/ads.routes.ts",
     "src/routes/advancedAI.routes.ts",
