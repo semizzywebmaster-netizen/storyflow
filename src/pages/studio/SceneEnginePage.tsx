@@ -1,71 +1,37 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Select } from '@/components/ui/select'
+import { PageContainer, PageHeader } from '@/components/layout/PageContainer'
+import { AppShell } from '@/components/layout/AppShell'
+import { useToast } from '@/hooks/useToast'
+import { apiClient, getSceneService } from '@/services'
+import type { Scene } from '@/types'
+import { Plus, MapPin, Film, Sparkles, GripVertical, Save, Trash2, WandSparkles, RefreshCw } from 'lucide-react'
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { PageContainer, PageHeader } from "@/components/layout/PageContainer"
-import { AppShell } from "@/components/layout/AppShell"
-import { Plus, Clock, MapPin, Users, Film, Sparkles, GripVertical } from "lucide-react"
-
-const scenes = [
-  { id: "1", index: 1, title: "The Midnight Call", location: "New York Apartment - Night", mood: "Tense", duration: 90, status: "COMPLETED", thumb: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=200" },
-  { id: "2", index: 2, title: "Lagos Arrival", location: "MM Airport - Day", mood: "Nostalgic", duration: 120, status: "COMPLETED", thumb: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=200" },
-  { id: "3", index: 3, title: "Village Homecoming", location: "Anambra Village - Afternoon", mood: "Emotional", duration: 150, status: "PENDING", thumb: "https://images.unsplash.com/photo-1523803326055-9729b9a04e5b?w=200" },
-]
+const unwrap = <T,>(res: any): T => (res?.data?.data ?? res?.data ?? res) as T
+const normalizeScene = (raw: any): Scene => ({ ...raw, index: Number(raw.index ?? raw.scene_index ?? 0), timeOfDay: raw.timeOfDay ?? raw.time_of_day ?? 'MORNING', duration: Number(raw.duration ?? raw.duration_seconds ?? 10), action: raw.action ?? '', dialogue: raw.dialogue ?? [], characterIds: raw.characterIds ?? raw.character_ids ?? [], imagePrompt: raw.imagePrompt ?? raw.visual_prompt ?? '', status: raw.status ?? 'PENDING' }) as Scene
 
 export function SceneEnginePage() {
-  return (
-    <AppShell>
-      <PageContainer>
-        <PageHeader title="Scene Engine" description="12 scenes • 12 min total • Manage location, time, characters, action, dialogue, visuals" action={<div className="flex gap-2"><Button variant="outline">Auto-Generate Scenes (2 cr)</Button><Button variant="studio"><Plus className="mr-2 h-4 w-4" /> New Scene</Button></div>} />
-        
-        <div className="grid md:grid-cols-3 gap-6">
-          <div className="space-y-3">
-            {scenes.map(s => (
-              <Card key={s.id} className="p-3 hover:shadow-md cursor-pointer">
-                <div className="flex gap-3">
-                  <GripVertical className="h-4 w-4 text-muted-foreground mt-2" />
-                  <img src={s.thumb} alt={s.title} className="w-20 h-14 rounded-lg object-cover" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2"><span className="text-xs font-bold">SCENE {s.index}</span><Badge variant={s.status === "COMPLETED" ? "success" : "secondary"} className="text-[10px]">{s.status}</Badge></div>
-                    <div className="font-medium truncate text-sm">{s.title}</div>
-                    <div className="text-xs text-muted-foreground flex items-center gap-2 mt-1"><MapPin className="h-3 w-3" /> {s.location} • {s.duration}s</div>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
+  const { success, error } = useToast(); const [projectId, setProjectId] = useState(''); const [projects, setProjects] = useState<any[]>([]); const [scenes, setScenes] = useState<Scene[]>([]); const [selectedId, setSelectedId] = useState(''); const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [instruction, setInstruction] = useState('')
+  const selected = useMemo(() => scenes.find(s => s.id === selectedId) || scenes[0] || null, [scenes, selectedId])
+  const loadProjects = useCallback(async () => { try { const res = await apiClient.get('/projects'); const value: any = unwrap<any>(res); const list = Array.isArray(value) ? value : (value?.data || []); setProjects(list); const queryProject = new URLSearchParams(window.location.search).get('projectId'); const stored = localStorage.getItem('storyflow_project_id'); const next = queryProject || stored || list[0]?.id || ''; if (next) { setProjectId(next); localStorage.setItem('storyflow_project_id', next) } } catch (e: any) { error('Projects unavailable', e?.message || 'Unable to load projects') } }, [error])
+  const loadScenes = useCallback(async (id: string) => { if (!id) { setLoading(false); return }; setLoading(true); try { const result = unwrap<any[]>(await (await getSceneService()).list(id)) || []; const normalized = result.map(normalizeScene).sort((a, b) => a.index - b.index); setScenes(normalized); setSelectedId(current => normalized.some(s => s.id === current) ? current : normalized[0]?.id || '') } catch (e: any) { error('Scenes unavailable', e?.message || 'Unable to load scenes') } finally { setLoading(false) } }, [error])
+  useEffect(() => { loadProjects() }, [loadProjects]); useEffect(() => { loadScenes(projectId) }, [projectId, loadScenes])
+  const updateSelected = (patch: Partial<Scene>) => { if (selected) setScenes(current => current.map(s => s.id === selected.id ? { ...s, ...patch } : s)) }
+  const saveScene = async () => { if (!projectId || !selected) return; setBusy(true); try { const saved = normalizeScene(unwrap(await (await getSceneService()).update(projectId, selected.id, { title: selected.title, sceneIndex: selected.index, location: selected.location, timeOfDay: selected.timeOfDay, action: selected.action, dialogue: selected.dialogue, emotion: selected.mood, cameraAngle: selected.cameraAngle, visualStyle: selected.visualStyle, visualPrompt: selected.imagePrompt, durationSeconds: selected.duration, status: selected.status }))); setScenes(current => current.map(s => s.id === saved.id ? saved : s)); success('Scene saved', 'Scene changes stored successfully.') } catch (e: any) { error('Save failed', e?.message || 'Unable to save scene') } finally { setBusy(false) } }
+  const newScene = async () => { if (!projectId) return; setBusy(true); try { const service = await getSceneService(); const nextIndex = scenes.length ? Math.max(...scenes.map(s => s.index)) + 1 : 0; const created = normalizeScene(unwrap(await service.create(projectId, { sceneIndex: nextIndex, title: `Scene ${nextIndex + 1}`, durationSeconds: 10, status: 'DRAFT' }))); setScenes(current => [...current, created].sort((a, b) => a.index - b.index)); setSelectedId(created.id); success('Scene created', 'New scene added to the project.') } catch (e: any) { error('Create failed', e?.message || 'Unable to create scene') } finally { setBusy(false) } }
+  const generateScene = async () => { if (!projectId) return; setBusy(true); try { const result: any = await (await getSceneService()).generateScenes(projectId); const generated = result?.data?.scene || result?.data?.data?.scene || result?.data; if (generated?.id) { const scene = normalizeScene(generated); setScenes(current => [...current, scene].sort((a, b) => a.index - b.index)); setSelectedId(scene.id) } else await loadScenes(projectId); success('AI scene generated', 'The new scene was added and saved.') } catch (e: any) { error('Generation failed', e?.message || 'Unable to generate scene') } finally { setBusy(false) } }
+  const deleteSelected = async () => { if (!projectId || !selected || !window.confirm('Delete this scene?')) return; setBusy(true); try { await (await getSceneService()).delete(projectId, selected.id); setScenes(current => current.filter(s => s.id !== selected.id)); success('Scene deleted', 'Scene removed from the project.') } catch (e: any) { error('Delete failed', e?.message || 'Unable to delete scene') } finally { setBusy(false) } }
+  const directWithAI = async () => { if (!projectId || !selected || instruction.trim().length < 3) return; setBusy(true); try { await (await getSceneService()).directScene(projectId, selected.id, instruction.trim()); setInstruction(''); await loadScenes(projectId); success('AI direction submitted', 'The scene was updated using your direction.') } catch (e: any) { error('AI direction failed', e?.message || 'Unable to direct scene') } finally { setBusy(false) } }
+  const moveScene = async (direction: -1 | 1) => { if (!projectId || !selected) return; const ordered = [...scenes].sort((a, b) => a.index - b.index); const from = ordered.findIndex(s => s.id === selected.id); const to = from + direction; if (from < 0 || to < 0 || to >= ordered.length) return; [ordered[from], ordered[to]] = [ordered[to], ordered[from]]; setScenes(ordered.map((s, i) => ({ ...s, index: i }))); try { await (await getSceneService()).reorder(projectId, ordered.map(s => s.id)); success('Scenes reordered', 'Production sequence updated.') } catch (e: any) { await loadScenes(projectId); error('Reorder failed', e?.message || 'Unable to reorder scenes') } }
+  const totalDuration = scenes.reduce((sum, scene) => sum + Number(scene.duration || 0), 0)
 
-          <div className="md:col-span-2 space-y-6">
-            <Card className="p-6">
-              <h3 className="font-semibold mb-4 flex items-center gap-2"><Film className="h-5 w-5" /> Scene 1 - The Midnight Call</h3>
-              <div className="space-y-4">
-                <div className="grid md:grid-cols-2 gap-4">
-                  <Input label="Scene Title" defaultValue="The Midnight Call" />
-                  <Input label="Location" defaultValue="New York Apartment - Night" />
-                </div>
-                <div className="grid md:grid-cols-3 gap-4">
-                  <Input label="Time of Day" defaultValue="NIGHT" />
-                  <Input label="Mood" defaultValue="Tense, Emotional" />
-                  <Input label="Duration (sec)" defaultValue="90" />
-                </div>
-                <Textarea label="Action" defaultValue="Emeka sits up in bed, phone light illuminating his worried face. Mama's voice cracks on the other end." rows={2} />
-                <Textarea label="Dialogue" defaultValue="EMEKA: Mama? What happened? Is it Papa?&#10;MAMA (V.O.): Your father... he is asking for you." rows={3} />
-                <Textarea label="Visual Prompt (for image generation)" defaultValue="A young Nigerian man in a modern New York apartment at 3AM, phone call, dramatic lighting, emotional, cinematic, 16:9" rows={2} />
-                <div className="grid md:grid-cols-2 gap-4">
-                  <Card className="p-3"><div className="text-xs font-medium mb-2">Characters in Scene</div><div className="flex gap-2"><Badge variant="studio">Emeka Okafor</Badge></div></Card>
-                  <Card className="p-3"><div className="text-xs font-medium mb-2">Assets</div><div className="text-xs text-muted-foreground">Image: Generated • Voice: Pending • Music: Suspense</div></Card>
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="studio" className="flex-1"><Sparkles className="mr-2 h-4 w-4" /> Generate Scene Image (5 cr)</Button>
-                  <Button variant="outline" className="flex-1">Direct with AI (2 cr)</Button>
-                </div>
-              </div>
-            </Card>
-          </div>
-        </div>
-      </PageContainer>
-    </AppShell>
-  )
+  return <AppShell><PageContainer maxWidth="7xl"><PageHeader title="Scene Engine" description={`${scenes.length} scenes • ${Math.round(totalDuration / 60)} min total • Production scene planning and AI direction`} action={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => loadScenes(projectId)} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" /> Refresh</Button><Button variant="outline" onClick={generateScene} isLoading={busy}><Sparkles className="mr-2 h-4 w-4" /> AI Generate Scene (5 cr)</Button><Button variant="studio" onClick={newScene} isLoading={busy}><Plus className="mr-2 h-4 w-4" /> New Scene</Button></div>} />
+    <Card className="mb-6"><CardContent className="p-4"><Select label="Active Project" value={projectId} onChange={e => { setProjectId(e.target.value); localStorage.setItem('storyflow_project_id', e.target.value) }} options={projects.map(p => ({ value: p.id, label: p.title || p.name || p.id }))} placeholder={projects.length ? 'Select a project' : 'No projects found'} /></CardContent></Card>
+    {!projectId ? <Card className="p-10 text-center"><Film className="mx-auto h-10 w-10 mb-3 text-muted-foreground" /><h2 className="text-xl font-semibold">Select a project</h2><p className="text-sm text-muted-foreground mt-2">Create a project first, then manage its scenes here.</p></Card> : loading ? <div className="py-20 text-center text-muted-foreground">Loading production scenes…</div> : <div className="grid md:grid-cols-3 gap-6"><div className="space-y-3">{scenes.length === 0 ? <Card className="p-6 text-center text-sm text-muted-foreground">No scenes yet. Create one or generate the next scene with AI.</Card> : scenes.map(s => <Card key={s.id} className={`p-3 cursor-pointer ${selected?.id === s.id ? 'ring-2 ring-primary' : 'hover:shadow-md'}`} onClick={() => setSelectedId(s.id)}><div className="flex gap-3"><GripVertical className="h-4 w-4 text-muted-foreground mt-2" /><div className="flex-1 min-w-0"><div className="flex items-center gap-2"><span className="text-xs font-bold">SCENE {s.index + 1}</span><Badge variant={s.status === 'COMPLETED' ? 'success' : 'secondary'} className="text-[10px]">{s.status}</Badge></div><div className="font-medium truncate text-sm">{s.title || `Scene ${s.index + 1}`}</div><div className="text-xs text-muted-foreground flex items-center gap-2 mt-1"><MapPin className="h-3 w-3" /> {s.location || 'Location not set'} • {s.duration}s</div></div></div></Card>)}</div>
+      <div className="md:col-span-2">{selected ? <Card><CardHeader><CardTitle className="flex items-center gap-2"><Film className="h-5 w-5" /> Scene {selected.index + 1}</CardTitle></CardHeader><CardContent className="space-y-4"><div className="grid md:grid-cols-2 gap-4"><Input label="Scene Title" value={selected.title || ''} onChange={e => updateSelected({ title: e.target.value })} /><Input label="Location" value={selected.location || ''} onChange={e => updateSelected({ location: e.target.value })} /></div><div className="grid md:grid-cols-3 gap-4"><Select label="Time of Day" value={selected.timeOfDay || 'MORNING'} onChange={e => updateSelected({ timeOfDay: e.target.value as any })} options={['DAWN','MORNING','AFTERNOON','EVENING','NIGHT','MIDNIGHT'].map(x => ({ value: x, label: x }))} /><Input label="Mood / Emotion" value={selected.mood || ''} onChange={e => updateSelected({ mood: e.target.value })} /><Input label="Duration (sec)" type="number" value={selected.duration || 10} onChange={e => updateSelected({ duration: Number(e.target.value) })} /></div><Textarea label="Action" value={selected.action || ''} onChange={e => updateSelected({ action: e.target.value })} rows={4} /><Textarea label="Dialogue" value={typeof selected.dialogue === 'string' ? selected.dialogue : JSON.stringify(selected.dialogue || '', null, 2)} onChange={e => updateSelected({ dialogue: e.target.value as any })} rows={5} /><Textarea label="Visual Prompt" value={selected.imagePrompt || ''} onChange={e => updateSelected({ imagePrompt: e.target.value })} rows={4} /><div className="flex flex-wrap gap-2"><Button variant="studio" onClick={saveScene} isLoading={busy}><Save className="mr-2 h-4 w-4" /> Save Scene</Button><Button variant="outline" onClick={() => moveScene(-1)} disabled={busy || selected.index <= 0}>Move Up</Button><Button variant="outline" onClick={() => moveScene(1)} disabled={busy || selected.index >= scenes.length - 1}>Move Down</Button><Button variant="outline" onClick={deleteSelected} disabled={busy} className="ml-auto"><Trash2 className="mr-2 h-4 w-4" /> Delete</Button></div><Card className="bg-muted/30"><CardContent className="p-4 space-y-3"><div className="font-medium flex items-center gap-2"><WandSparkles className="h-4 w-4" /> Direct this scene with AI</div><Textarea value={instruction} onChange={e => setInstruction(e.target.value)} placeholder="Make the scene more emotional, change the camera angle, improve the dialogue, increase tension…" rows={3} /><Button variant="outline" onClick={directWithAI} disabled={busy || instruction.trim().length < 3}><Sparkles className="mr-2 h-4 w-4" /> Apply AI Direction</Button></CardContent></Card></CardContent></Card> : <Card className="p-10 text-center"><Film className="mx-auto h-10 w-10 mb-3 text-muted-foreground" /><h2 className="text-xl font-semibold">No scene selected</h2><p className="text-sm text-muted-foreground mt-2">Create or generate your first scene.</p></Card>}</div></div>}</PageContainer></AppShell>
 }
