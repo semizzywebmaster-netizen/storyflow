@@ -14,6 +14,27 @@ router.use(authenticate)
 const VOICE_CREDIT_COST = 4
 const MAX_TEXT = 40000
 
+router.get('/voices', aiRateLimiter, async (_req: AuthRequest, res, next) => {
+  try {
+    if (!config.ai.elevenlabsApiKey) return next(createError('Voice provider is not configured', 503))
+    const response = await fetch('https://api.elevenlabs.io/v1/voices', {
+      headers: { 'xi-api-key': config.ai.elevenlabsApiKey },
+      signal: AbortSignal.timeout(30000),
+    })
+    const body = await response.text()
+    if (!response.ok) throw new Error(`ElevenLabs returned HTTP ${response.status}: ${body.slice(0, 500)}`)
+    const payload = JSON.parse(body)
+    const voices = Array.isArray(payload.voices) ? payload.voices.map((voice: any) => ({
+      id: voice.voice_id,
+      name: voice.name,
+      category: voice.category ?? null,
+      labels: voice.labels ?? {},
+      previewUrl: voice.preview_url ?? null,
+    })) : []
+    return res.json({ success: true, data: voices })
+  } catch (error) { next(error) }
+})
+
 router.post('/generate', aiRateLimiter, async (req: AuthRequest, res, next) => {
   let generationId: string | null = null
   try {
