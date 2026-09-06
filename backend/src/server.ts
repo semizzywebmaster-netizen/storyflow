@@ -12,6 +12,8 @@ import { storyRoutes } from './routes/story.routes'
 import { characterRoutes } from './routes/character.routes'
 import { sceneRoutes } from './routes/scene.routes'
 import { imageRoutes } from './routes/image.routes'
+import { voiceRoutes } from './routes/voice.routes'
+import { sfxRoutes } from './routes/sfx.routes'
 import { assetRoutes } from './routes/asset.routes'
 import { generationRoutes } from './routes/generation.routes'
 import { creditRoutes } from './routes/credit.routes'
@@ -24,7 +26,8 @@ import { analyticsRoutes } from './routes/analytics.routes'
 
 const app = express()
 app.use(helmet())
-app.use(cors({ origin: [config.frontendUrl, 'http://localhost:5173', 'http://localhost:3000'], credentials: true }))
+const allowedOrigins = [config.frontendUrl, ...(config.nodeEnv === 'development' ? ['http://localhost:5173', 'http://localhost:3000'] : [])]
+app.use(cors({ origin: allowedOrigins, credentials: true }))
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use(requestLogger)
@@ -37,6 +40,8 @@ app.use('/api/stories', storyRoutes)
 app.use('/api/characters', characterRoutes)
 app.use('/api/scenes', sceneRoutes)
 app.use('/api/images', imageRoutes)
+app.use('/api/voice', voiceRoutes)
+app.use('/api/sfx', sfxRoutes)
 app.use('/api/assets', assetRoutes)
 app.use('/api/generations', generationRoutes)
 app.use('/api/credits', creditRoutes)
