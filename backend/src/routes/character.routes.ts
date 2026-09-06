@@ -41,6 +41,43 @@ router.post('/', async (req: AuthRequest, res, next) => {
   } catch (error) { next(error) }
 })
 
+router.put('/:id', async (req: AuthRequest, res, next) => {
+  try {
+    const { name, role, age, gender, appearance, personality, background, clothingStyle, skinTone, hairStyle } = req.body ?? {}
+    if (name !== undefined && !String(name).trim()) return next(createError('name cannot be empty', 400))
+
+    const result = await query(
+      `UPDATE characters c SET
+        name = COALESCE($1, c.name), role = COALESCE($2, c.role), age = COALESCE($3, c.age),
+        gender = COALESCE($4, c.gender), appearance = COALESCE($5, c.appearance),
+        personality = COALESCE($6, c.personality), background = COALESCE($7, c.background),
+        clothing_style = COALESCE($8, c.clothing_style), skin_tone = COALESCE($9, c.skin_tone),
+        hair_style = COALESCE($10, c.hair_style), updated_at = NOW()
+       FROM projects p
+       WHERE c.id = $11 AND c.project_id = p.id AND p.user_id = $12
+         AND p.deleted_at IS NULL AND c.is_locked = FALSE
+       RETURNING c.*`,
+      [name !== undefined ? String(name).trim() : null, role, age, gender, appearance, personality, background, clothingStyle, skinTone, hairStyle, req.params.id, req.user!.id]
+    )
+    if (result.rows.length === 0) return next(createError('Character not found or locked', 404))
+    return res.json({ success: true, data: result.rows[0] })
+  } catch (error) { next(error) }
+})
+
+router.delete('/:id', async (req: AuthRequest, res, next) => {
+  try {
+    const result = await query(
+      `DELETE FROM characters c USING projects p
+       WHERE c.id = $1 AND c.project_id = p.id AND p.user_id = $2
+         AND p.deleted_at IS NULL AND c.is_locked = FALSE
+       RETURNING c.id`,
+      [req.params.id, req.user!.id]
+    )
+    if (result.rows.length === 0) return next(createError('Character not found or locked', 404))
+    return res.json({ success: true, message: 'Character deleted' })
+  } catch (error) { next(error) }
+})
+
 router.put('/:id/lock', async (req: AuthRequest, res, next) => {
   try {
     const result = await query(
