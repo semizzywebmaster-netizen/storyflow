@@ -5,7 +5,9 @@ import { query } from '../database/connection'
 import { createError } from '../middleware/errorHandler'
 import { aiProviderRouter } from '../services/aiProviderRouter'
 import { creditService } from '../services/creditService'
+import { storageService } from '../services/storageService'
 import { config } from '../config'
+import { randomUUID } from 'crypto'
 
 const router = Router()
 router.use(authenticate)
@@ -54,9 +56,17 @@ router.post('/generate', aiRateLimiter, async (req: AuthRequest, res, next) => {
     await creditService.reserveCredits(req.user!.id, IMAGE_CREDIT_COST, generationId, 'Image generation')
     await query(`UPDATE generations SET status='PROCESSING',updated_at=NOW() WHERE id=$1`, [generationId])
     const result = await aiProviderRouter.executeWithFallback({ capability: 'IMAGE', prompt: prompt.trim(), userId: req.user!.id, plan, creditsAvailable: credits, metadata: { credits: IMAGE_CREDIT_COST, model: route.model } }, (provider, model) => generateImage(provider, model, prompt.trim(), String(size)))
-    const asset = await query(`INSERT INTO assets (user_id,project_id,scene_id,type,url,mime_type,prompt,model,metadata) VALUES ($1,$2,$3,'IMAGE',$4,'image/*',$5,$6,$7) RETURNING *`, [req.user!.id, projectId ?? null, sceneId ?? null, result.url, prompt.trim(), route.model, JSON.stringify({ generationId, size, revisedPrompt: result.revisedPrompt || null })])
+
+    const imageResponse = await fetch(result.url, { signal: AbortSignal.timeout(60000) })
+    if (!imageResponse.ok) throw new Error(`Generated image could not be downloaded: HTTP ${imageResponse.status}`)
+    const imageBuffer = Buffer.from(await imageResponse.arrayBuffer())
+    const contentType = imageResponse.headers.get('content-type')?.split(';')[0] || 'image/png'
+    const key = `users/${req.user!.id}/projects/${projectId || 'library'}/images/${randomUUID()}.png`
+    const stored = await storageService.uploadFile(imageBuffer, key, contentType, { userId: req.user!.id, maxSize: 20 * 1024 * 1024 })
+
+    const asset = await query(`INSERT INTO assets (user_id,project_id,scene_id,type,url,mime_type,file_size,prompt,model,metadata) VALUES ($1,$2,$3,'IMAGE',$4,$5,$6,$7,$8,$9) RETURNING *`, [req.user!.id, projectId ?? null, sceneId ?? null, stored.url, contentType, stored.size, prompt.trim(), route.model, JSON.stringify({ generationId, size, revisedPrompt: result.revisedPrompt || null, sourceProviderUrl: result.url })])
     await creditService.consumeReservedCredits(req.user!.id, generationId)
-    await query(`UPDATE generations SET status='COMPLETED',credits_consumed=credits_reserved,result_url=$2,updated_at=NOW() WHERE id=$1`, [generationId, result.url])
+    await query(`UPDATE generations SET status='COMPLETED',credits_consumed=credits_reserved,result_url=$2,updated_at=NOW() WHERE id=$1`, [generationId, stored.url])
     return res.status(201).json({ success: true, message: 'Image generated successfully', data: { generationId, asset: asset.rows[0] } })
   } catch (error: any) {
     if (generationId) {
