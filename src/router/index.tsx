@@ -52,13 +52,27 @@ import { AdminCouponsPage } from '@/pages/admin/AdminCouponsPage'
 import { AdminAnnouncementsPage } from '@/pages/admin/AdminAnnouncementsPage'
 import { AdminAdsPage } from '@/pages/admin/AdminAdsPage'
 import { AdminNotificationsPage } from '@/pages/admin/AdminNotificationsPage'
+import { useAuthStore } from '@/stores/authStore'
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const token = localStorage.getItem('auth_token')
+function ProtectedRoute({
+  children,
+  adminOnly = false,
+}: {
+  children: React.ReactNode
+  adminOnly?: boolean
+}) {
+  const { user, token, isAuthenticated } = useAuthStore()
   const isMockMode = import.meta.env.VITE_ENABLE_MOCK === 'true'
-  if (!isMockMode && !token) {
+  const authenticated = isAuthenticated || Boolean(token) || Boolean(localStorage.getItem('auth_token'))
+
+  if (!isMockMode && !authenticated) {
     return <Navigate to="/login" replace />
   }
+
+  if (!isMockMode && adminOnly && !['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '')) {
+    return <Navigate to="/dashboard" replace />
+  }
+
   return <>{children}</>
 }
 
@@ -112,15 +126,15 @@ export const router = createBrowserRouter([
       { path: 'analytics', element: <ProtectedRoute><AnalyticsPage /></ProtectedRoute> },
       { path: 'settings', element: <ProtectedRoute><SettingsPage /></ProtectedRoute> },
       { path: 'social-scheduling', element: <ProtectedRoute><SocialSchedulingPage /></ProtectedRoute> },
-      { path: 'admin', element: <ProtectedRoute><AdminDashboardPage /></ProtectedRoute> },
-      { path: 'admin/features', element: <ProtectedRoute><AdminFeaturesPage /></ProtectedRoute> },
-      { path: 'admin/providers', element: <ProtectedRoute><AdminProvidersPage /></ProtectedRoute> },
-      { path: 'admin/users', element: <ProtectedRoute><AdminUsersPage /></ProtectedRoute> },
-      { path: 'admin/finance', element: <ProtectedRoute><AdminFinancePage /></ProtectedRoute> },
-      { path: 'admin/coupons', element: <ProtectedRoute><AdminCouponsPage /></ProtectedRoute> },
-      { path: 'admin/announcements', element: <ProtectedRoute><AdminAnnouncementsPage /></ProtectedRoute> },
-      { path: 'admin/ads', element: <ProtectedRoute><AdminAdsPage /></ProtectedRoute> },
-      { path: 'admin/notifications', element: <ProtectedRoute><AdminNotificationsPage /></ProtectedRoute> },
+      { path: 'admin', element: <ProtectedRoute adminOnly><AdminDashboardPage /></ProtectedRoute> },
+      { path: 'admin/features', element: <ProtectedRoute adminOnly><AdminFeaturesPage /></ProtectedRoute> },
+      { path: 'admin/providers', element: <ProtectedRoute adminOnly><AdminProvidersPage /></ProtectedRoute> },
+      { path: 'admin/users', element: <ProtectedRoute adminOnly><AdminUsersPage /></ProtectedRoute> },
+      { path: 'admin/finance', element: <ProtectedRoute adminOnly><AdminFinancePage /></ProtectedRoute> },
+      { path: 'admin/coupons', element: <ProtectedRoute adminOnly><AdminCouponsPage /></ProtectedRoute> },
+      { path: 'admin/announcements', element: <ProtectedRoute adminOnly><AdminAnnouncementsPage /></ProtectedRoute> },
+      { path: 'admin/ads', element: <ProtectedRoute adminOnly><AdminAdsPage /></ProtectedRoute> },
+      { path: 'admin/notifications', element: <ProtectedRoute adminOnly><AdminNotificationsPage /></ProtectedRoute> },
       { path: '*', element: <Navigate to="/" replace /> }
     ]
   }
