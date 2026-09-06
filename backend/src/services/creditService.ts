@@ -7,8 +7,17 @@ export class CreditService {
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
-      const existing = await client.query('SELECT balance_after FROM credit_transactions WHERE user_id = $1 AND reference_id = $2 LIMIT 1', [userId, referenceId])
-      if (existing.rows.length) { await client.query('COMMIT'); return { success: true, balanceAfter: Number(existing.rows[0].balance_after) } }
+      const existing = await client.query(`
+        SELECT amount, balance_after, metadata->>'state' AS state
+        FROM credit_transactions
+        WHERE user_id = $1 AND reference_id = $2::uuid AND type = 'GENERATION'
+        ORDER BY created_at DESC LIMIT 1
+      `, [userId, referenceId])
+      if (existing.rows.length) {
+        const state = existing.rows[0].state || 'RESERVED'
+        if (state === 'RESERVED') { await client.query('COMMIT'); return { success: true, balanceAfter: Number(existing.rows[0].balance_after) } }
+        throw new Error(`Credit reservation reference is already finalized (${state})`)
+      }
       const user = await client.query('SELECT credits FROM users WHERE id = $1 FOR UPDATE', [userId])
       if (!user.rows.length) throw new Error('User not found')
       const balance = Number(user.rows[0].credits)
@@ -26,8 +35,11 @@ export class CreditService {
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
-      const result = await client.query(`SELECT id FROM credit_transactions WHERE user_id = $1 AND reference_id = $2::uuid AND COALESCE(metadata->>'state','RESERVED') = 'RESERVED' FOR UPDATE`, [userId, referenceId])
-      if (!result.rows.length) throw new Error('Credit reservation not found or already finalized')
+      const result = await client.query(`SELECT id, metadata->>'state' AS state FROM credit_transactions WHERE user_id = $1 AND reference_id = $2::uuid AND type='GENERATION' ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, [userId, referenceId])
+      if (!result.rows.length) throw new Error('Credit reservation not found')
+      const state = result.rows[0].state || 'RESERVED'
+      if (state === 'CONSUMED') { await client.query('COMMIT'); return }
+      if (state !== 'RESERVED') throw new Error(`Credit reservation is already finalized (${state})`)
       await client.query(`UPDATE credit_transactions SET metadata = metadata || '{"state":"CONSUMED"}'::jsonb WHERE id = $1`, [result.rows[0].id])
       await client.query('COMMIT')
     } catch (error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
@@ -38,8 +50,11 @@ export class CreditService {
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
-      const reservation = await client.query(`SELECT id, amount FROM credit_transactions WHERE user_id = $1 AND reference_id = $2::uuid AND COALESCE(metadata->>'state','RESERVED') = 'RESERVED' FOR UPDATE`, [userId, referenceId])
-      if (!reservation.rows.length) throw new Error('Credit reservation not found or already finalized')
+      const reservation = await client.query(`SELECT id, amount, metadata->>'state' AS state FROM credit_transactions WHERE user_id = $1 AND reference_id = $2::uuid AND type='GENERATION' ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, [userId, referenceId])
+      if (!reservation.rows.length) throw new Error('Credit reservation not found')
+      const state = reservation.rows[0].state || 'RESERVED'
+      if (state === 'RELEASED' || state === 'CONSUMED') { await client.query('COMMIT'); return }
+      if (state !== 'RESERVED') throw new Error(`Credit reservation is already finalized (${state})`)
       const reservedAmount = Math.abs(Number(reservation.rows[0].amount))
       if (reservedAmount !== amount) throw new Error('Credit release amount does not match the reserved amount')
       const updated = await client.query('UPDATE users SET credits = credits + $1, updated_at = NOW() WHERE id = $2 RETURNING credits', [reservedAmount, userId])
