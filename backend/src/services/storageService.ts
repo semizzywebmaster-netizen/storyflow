@@ -1,4 +1,5 @@
-import AWS from 'aws-sdk'
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { config } from '../config'
 
 const ALLOWED_TYPES = new Set([
@@ -7,11 +8,13 @@ const ALLOWED_TYPES = new Set([
 ])
 
 const s3 = config.r2.accountId && config.r2.accessKeyId && config.r2.secretAccessKey
-  ? new AWS.S3({
+  ? new S3Client({
+      region: 'auto',
       endpoint: `https://${config.r2.accountId}.r2.cloudflarestorage.com`,
-      accessKeyId: config.r2.accessKeyId,
-      secretAccessKey: config.r2.secretAccessKey,
-      signatureVersion: 'v4',
+      credentials: {
+        accessKeyId: config.r2.accessKeyId,
+        secretAccessKey: config.r2.secretAccessKey,
+      },
     })
   : null
 
@@ -23,13 +26,13 @@ export class StorageService {
     if (!s3) throw new Error('R2 storage is not configured')
     if (!config.r2.publicUrl) throw new Error('R2 public URL is not configured')
 
-    await s3.putObject({
+    await s3.send(new PutObjectCommand({
       Bucket: config.r2.bucket,
       Key: key,
       Body: file,
       ContentType: mimeType,
       Metadata: { userId: options.userId },
-    }).promise()
+    }))
 
     return {
       url: `${config.r2.publicUrl.replace(/\/$/, '')}/${key}`,
@@ -40,12 +43,12 @@ export class StorageService {
 
   async getSignedUrl(key: string, expiresIn = 3600): Promise<string> {
     if (!s3) throw new Error('R2 storage is not configured')
-    return s3.getSignedUrlPromise('getObject', { Bucket: config.r2.bucket, Key: key, Expires: expiresIn })
+    return getSignedUrl(s3, new GetObjectCommand({ Bucket: config.r2.bucket, Key: key }), { expiresIn })
   }
 
   async deleteFile(key: string): Promise<void> {
     if (!s3) throw new Error('R2 storage is not configured')
-    await s3.deleteObject({ Bucket: config.r2.bucket, Key: key }).promise()
+    await s3.send(new DeleteObjectCommand({ Bucket: config.r2.bucket, Key: key }))
   }
 }
 
