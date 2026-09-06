@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils"
+export { PageHeader } from "./PageHeader"
 
 interface PageContainerProps {
   children: React.ReactNode
