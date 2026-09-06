@@ -32,7 +32,7 @@ export class AuthService {
         if (roleResult.rows.length > 0) await query('INSERT INTO user_roles (user_id, role_id, created_at) VALUES ($1, $2, NOW())', [user.id, roleResult.rows[0].id])
       } catch {}
       await query('COMMIT')
-      return { user, token: this.generateToken(user) }
+      return { user: { ...user, role: 'USER' }, token: this.generateToken({ ...user, role: 'USER' }) }
     } catch (err: any) {
       try { await query('ROLLBACK') } catch {}
       if (err.statusCode) throw err
@@ -43,7 +43,25 @@ export class AuthService {
 
   async login(email: string, password: string, ipAddress?: string, userAgent?: string): Promise<any> {
     try {
-      const result = await query('SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL', [email.toLowerCase()])
+      const result = await query(`
+        SELECT
+          u.*,
+          COALESCE(
+            (
+              SELECT CASE
+                WHEN BOOL_OR(r.name = 'SUPER_ADMIN') THEN 'SUPER_ADMIN'
+                WHEN BOOL_OR(r.name = 'ADMIN') THEN 'ADMIN'
+                ELSE 'USER'
+              END
+              FROM user_roles ur
+              JOIN roles r ON r.id = ur.role_id
+              WHERE ur.user_id = u.id
+            ),
+            'USER'
+          ) AS role
+        FROM users u
+        WHERE u.email = $1 AND u.deleted_at IS NULL
+      `, [email.toLowerCase()])
       if (result.rows.length === 0) throw createError('Invalid credentials', 401)
       const user = result.rows[0]
       if (!user.is_active) throw createError('Account deactivated', 403)
@@ -74,7 +92,35 @@ export class AuthService {
 
   async getCurrentUser(userId: string): Promise<any> {
     try {
-      const result = await query('SELECT id, email, username, display_name, plan, credits, avatar_url, bio, is_verified, is_active, created_at FROM users WHERE id = $1 AND deleted_at IS NULL', [userId])
+      const result = await query(`
+        SELECT
+          u.id,
+          u.email,
+          u.username,
+          u.display_name,
+          u.plan,
+          u.credits,
+          u.avatar_url,
+          u.bio,
+          u.is_verified,
+          u.is_active,
+          u.created_at,
+          COALESCE(
+            (
+              SELECT CASE
+                WHEN BOOL_OR(r.name = 'SUPER_ADMIN') THEN 'SUPER_ADMIN'
+                WHEN BOOL_OR(r.name = 'ADMIN') THEN 'ADMIN'
+                ELSE 'USER'
+              END
+              FROM user_roles ur
+              JOIN roles r ON r.id = ur.role_id
+              WHERE ur.user_id = u.id
+            ),
+            'USER'
+          ) AS role
+        FROM users u
+        WHERE u.id = $1 AND u.deleted_at IS NULL
+      `, [userId])
       if (result.rows.length === 0) throw createError('User not found', 404)
       return result.rows[0]
     } catch (err: any) {
