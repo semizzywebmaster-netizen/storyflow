@@ -4,38 +4,54 @@
 
 Production-grade SaaS platform for AI content creation.
 
-## Phase Status
-
-- ✅ PHASE 00 - Architecture & Foundation (Current)
-
 ## Tech Stack
 
-**Frontend:**
-- React 18 + Vite 4 + TypeScript 5
-- Tailwind CSS 3.4
-- React Router 6
-- Zustand
-- PWA (vite-plugin-pwa)
-- Modular service abstraction
+**Frontend:** React 18 + Vite + TypeScript, Tailwind CSS, React Router, Zustand, PWA.
 
-**Target Backend:**
-- Node.js + Express + TypeScript
-- PostgreSQL
-- Cloudflare R2
-- FFmpeg
-- AI Provider Router
+**Backend:** Node.js + Express + TypeScript, PostgreSQL, Cloudflare R2, FFmpeg, AI Provider Router.
 
-## Architecture Principles
+## Production Architecture
 
-1. **Frontend First** - Build entire frontend with mock services
-2. **Service Abstraction** - No direct AI provider coupling
-3. **Migration Friendly** - Free tier now, VPS later
-4. **Production Grade** - Not a demo
-5. **Zero-Cost MVP** - Cloudflare Pages + free tier services
+The frontend can be deployed as static assets. The complete backend requires a persistent Node.js runtime, PostgreSQL, Cloudflare R2, configured AI/payment providers, and FFmpeg. A static-only frontend host cannot run the complete backend/video workload.
+
+Recommended split-origin setup:
+
+- Frontend: `https://storyflow.online`
+- API: `https://api.storyflow.online`
+
+Alternatively, use a reverse proxy so `/api/*` on the frontend origin routes to the Node backend.
+
+## Production Deployment
+
+1. Configure production environment variables from `backend/.env.example`.
+2. Set frontend `VITE_API_URL` to the public API base, such as `https://api.storyflow.online/api` for split-origin deployment.
+3. Keep all AI, database, R2 and payment secrets server-side; never put them in `VITE_*` variables.
+4. Set `ENABLE_MOCK=false` on the backend and frontend.
+5. Build and deploy the backend with FFmpeg available.
+6. Run `npm run migrate:prod` from the backend release before serving traffic.
+7. Verify `GET /health` returns HTTP 200.
+8. Configure HTTPS and the payment webhook endpoints under `/api/payments/webhook/*`.
+9. Test authentication, project ownership, credits, R2, AI generation, payments and video rendering before live launch.
+
+The production Dockerfile installs FFmpeg, runs the application as a non-root user, and includes database migration SQL files. The migration runner uses a PostgreSQL advisory transaction lock to protect concurrent deployments.
+
+## Development
+
+```bash
+npm install
+npm run dev
+```
+
+## Build
+
+```bash
+npm run build
+npm run preview
+```
 
 ## Service Layer
 
-```
+```text
 authService
 projectService
 storyService
@@ -52,54 +68,6 @@ adminService
 analyticsService
 ```
 
-## Folder Structure
+## Launch Policy
 
-```
-src/
-  components/
-    ui/           # Design system primitives
-    layout/       # Layout components
-    features/     # Feature modules
-  config/         # Centralized config + feature flags
-  services/
-    interfaces/   # Service contracts
-    mock/         # Mock implementations
-    api/          # Real API implementations (later)
-  types/          # Global TypeScript interfaces
-  lib/            # Utilities
-  hooks/          # Custom hooks
-  stores/         # Zustand stores
-  router/         # Routing config
-  pages/          # Route components
-  assets/
-  styles/
-```
-
-## Getting Started
-
-```bash
-npm install
-npm run dev
-```
-
-## Build
-
-```bash
-npm run build
-npm run preview
-```
-
-## Environment
-
-Copy `.env.example` to `.env` and fill values.
-
-Only `VITE_` prefixed vars are exposed to frontend.
-
-## Commit Convention
-
-```
-phase-00-architecture
-phase-01-design-system
-phase-02-landing-page
-...
-```
+CI passing confirms the code builds; it does not prove that external production credentials, domains, databases, payment webhooks, AI providers, R2 or FFmpeg are configured. Those integrations must be verified separately before launch.
