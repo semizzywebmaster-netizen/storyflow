@@ -7,14 +7,14 @@ import { createError } from '../middleware/errorHandler'
 const router = Router()
 router.use(authenticate)
 
-const allowedTypes = new Set(['story', 'character', 'image', 'voice', 'video', 'music', 'subtitle', 'thumbnail', 'social'])
+const allowedTypes = new Set(['story', 'character', 'scene', 'image', 'voice', 'video', 'music', 'subtitle', 'thumbnail', 'social'])
 
 router.post('/:type', aiRateLimiter, async (req: AuthRequest, res, next) => {
   try {
     const type = String(req.params.type).toLowerCase()
     if (!allowedTypes.has(type)) return next(createError('Unsupported generation type', 400))
 
-    const { projectId, prompt } = req.body ?? {}
+    const { projectId } = req.body ?? {}
     if (projectId) {
       const project = await query(
         'SELECT id FROM projects WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
@@ -23,7 +23,7 @@ router.post('/:type', aiRateLimiter, async (req: AuthRequest, res, next) => {
       if (project.rows.length === 0) return next(createError('Project not found', 404))
     }
 
-    return next(createError('Generation service is not configured', 501))
+    return next(createError(`Use the dedicated /api/${type === 'scene' ? 'scenes/generate' : type === 'story' ? 'stories/generate' : 'generation/' + type} endpoint for this generation type`, 501))
   } catch (error) { next(error) }
 })
 
