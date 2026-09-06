@@ -1,97 +1,89 @@
+import { useEffect, useState } from 'react'
+import { apiClient } from '@/lib/api-client'
+import { Button } from '@/components/ui/button'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { PageContainer, PageHeader } from '@/components/layout/PageContainer'
+import { AppShell } from '@/components/layout/AppShell'
+import { Video, Play, Download, RefreshCw, Save, Plus, Minus } from 'lucide-react'
 
-import { Button } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { PageContainer, PageHeader } from "@/components/layout/PageContainer"
-import { AppShell } from "@/components/layout/AppShell"
-import { Video, Play, Pause, RefreshCw, Download, Clock, CheckCircle, AlertCircle } from "lucide-react"
+type Clip = { id: string; sceneId?: string; title: string; start: number; duration: number; transition?: string }
+type Timeline = { version: number; fps: number; aspectRatio: string; tracks: Array<{ id: string; type: string; name: string; clips: Clip[] }> }
+type Project = { id: string; title?: string }
+type Job = { id: string; url?: string; resultUrl?: string; durationSeconds?: number }
+
+const dataOf = (r: any) => Array.isArray(r?.data) ? r.data : r?.data?.data ?? r?.data ?? []
 
 export function VideoGenerationPage() {
-  return (
-    <AppShell>
-      <PageContainer>
-        <PageHeader title="Video Generation Workspace" description="Story → Scenes → Images → Voice → Music → SFX → Video. Full pipeline assembly." action={<Badge variant="studio">20 credits per video</Badge>} />
-        
-        <div className="grid md:grid-cols-3 gap-6">
-          <div className="md:col-span-2 space-y-6">
-            <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2"><Video className="h-5 w-5" /> Generation Queue</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                {[
-                  { id: "1", project: "The Return", status: "PROCESSING", progress: 78, current: "Scene 7/12 - Rendering with FFmpeg", time: "2m 34s left" },
-                  { id: "2", project: "Lagos Love Story", status: "QUEUED", progress: 0, current: "Waiting in queue", time: "Estimated 5m" },
-                  { id: "3", project: "Ancient Kingdom", status: "COMPLETED", progress: 100, current: "Ready for export", time: "Completed 1h ago" },
-                ].map(job => (
-                  <Card key={job.id} className="p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${job.status === "PROCESSING" ? "bg-amber-500 animate-pulse" : job.status === "COMPLETED" ? "bg-green-500" : "bg-muted-foreground"}`} />
-                        <span className="font-medium text-sm">{job.project}</span>
-                        <Badge variant={job.status === "COMPLETED" ? "success" : job.status === "PROCESSING" ? "warning" : "secondary"} className="text-[10px]">{job.status}</Badge>
-                      </div>
-                      <div className="flex gap-1">
-                        {job.status === "PROCESSING" ? <Button size="icon" variant="ghost" className="h-7 w-7"><Pause className="h-3 w-3" /></Button> : null}
-                        {job.status === "COMPLETED" ? <Button size="icon" variant="ghost" className="h-7 w-7"><Play className="h-3 w-3" /></Button> : null}
-                        <Button size="icon" variant="ghost" className="h-7 w-7"><Download className="h-3 w-3" /></Button>
-                      </div>
-                    </div>
-                    <Progress value={job.progress} className="h-2 mb-2" />
-                    <div className="flex justify-between text-xs text-muted-foreground"><span>{job.current}</span><span>{job.time}</span></div>
-                  </Card>
-                ))}
-              </CardContent>
-            </Card>
+  const [projects, setProjects] = useState<Project[]>([])
+  const [projectId, setProjectId] = useState('')
+  const [timeline, setTimeline] = useState<Timeline | null>(null)
+  const [jobs, setJobs] = useState<Job[]>([])
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState('')
 
-            <Card>
-              <CardHeader><CardTitle>Assembly Pipeline</CardTitle></CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {[
-                    { step: "Story & Scenes", status: "done", desc: "12 scenes validated" },
-                    { step: "Images", status: "done", desc: "12 images generated" },
-                    { step: "Voiceovers", status: "done", desc: "24 dialogue lines • 12 narration" },
-                    { step: "Music & SFX", status: "done", desc: "3 tracks • 4 SFX" },
-                    { step: "Timeline Assembly", status: "processing", desc: "FFmpeg composing..." },
-                    { step: "Subtitles", status: "pending", desc: "Burn-in captions" },
-                    { step: "Final Export", status: "pending", desc: "1080p • 16:9 • 24fps" },
-                  ].map(s => (
-                    <div key={s.step} className="flex items-center gap-3 p-3 rounded-xl border">
-                      {s.status === "done" ? <CheckCircle className="h-5 w-5 text-green-500" /> : s.status === "processing" ? <Clock className="h-5 w-5 text-amber-500 animate-spin" /> : <div className="h-5 w-5 rounded-full border-2 border-muted" />}
-                      <div className="flex-1"><div className="text-sm font-medium">{s.step}</div><div className="text-xs text-muted-foreground">{s.desc}</div></div>
-                      <Badge variant={s.status === "done" ? "success" : s.status === "processing" ? "warning" : "secondary"} className="text-[10px]">{s.status}</Badge>
-                    </div>
-                  ))}
-                </div>
-                <Button variant="studio" className="w-full mt-6 h-12">Generate Video (20 credits)</Button>
-              </CardContent>
-            </Card>
-          </div>
+  const clips = timeline?.tracks?.find(t => t.type === 'VIDEO')?.clips ?? []
+  const duration = clips.reduce((max, c) => Math.max(max, c.start + c.duration), 0)
 
-          <div className="space-y-6">
-            <Card className="p-4">
-              <div className="aspect-video bg-muted rounded-xl mb-3 overflow-hidden relative">
-                <img src="https://images.unsplash.com/photo-1523803326055-9729b9a04e5b?w=400" alt="Preview" className="w-full h-full object-cover" />
-                <div className="absolute inset-0 flex items-center justify-center"><Button size="icon" variant="secondary" className="h-12 w-12 rounded-full"><Play className="h-6 w-6" /></Button></div>
-                <div className="absolute bottom-2 left-2 right-2 h-1 bg-white/30 rounded-full"><div className="h-full w-[78%] bg-white rounded-full" /></div>
-              </div>
-              <div className="text-sm font-medium">The Return - Preview</div>
-              <div className="text-xs text-muted-foreground">1080p • 12:34 • 24fps</div>
-            </Card>
+  const load = async (id: string) => {
+    if (!id) return
+    setBusy(true); setNotice('')
+    try {
+      const [t, a]: any[] = await Promise.all([apiClient.get(`/videos/timeline/${id}`), apiClient.get(`/assets?projectId=${encodeURIComponent(id)}`)])
+      const td = t.data?.data ?? t.data
+      setTimeline(td?.timeline ?? td)
+      setJobs(dataOf(a).filter((x: any) => x.type === 'VIDEO').map((x: any) => ({ id: x.id, url: x.url, resultUrl: x.url, durationSeconds: x.duration_seconds ?? x.durationSeconds })))
+      localStorage.setItem('storyflow_project_id', id)
+    } catch (e: any) { setNotice(e?.message || 'Unable to load timeline') }
+    finally { setBusy(false) }
+  }
 
-            <Card className="p-6">
-              <h3 className="font-semibold mb-3">Export Settings</h3>
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between"><span>Resolution</span><span>1080p</span></div>
-                <div className="flex justify-between"><span>Aspect</span><span>16:9</span></div>
-                <div className="flex justify-between"><span>FPS</span><span>24</span></div>
-                <div className="flex justify-between"><span>Subtitles</span><span>Burn-in</span></div>
-                <div className="flex justify-between"><span>Watermark</span><span>None (PRO)</span></div>
-              </div>
-            </Card>
-          </div>
-        </div>
-      </PageContainer>
-    </AppShell>
-  )
+  useEffect(() => {
+    apiClient.get('/projects').then((r: any) => {
+      const list = dataOf(r); setProjects(list)
+      const saved = localStorage.getItem('storyflow_project_id')
+      setProjectId(list.some((p: Project) => p.id === saved) ? saved! : list[0]?.id || '')
+    }).catch((e: any) => setNotice(e?.message || 'Unable to load projects'))
+  }, [])
+
+  useEffect(() => { if (projectId) void load(projectId) }, [projectId])
+
+  const resize = (id: string, amount: number) => setTimeline(t => t ? ({ ...t, tracks: t.tracks.map(track => ({ ...track, clips: track.clips.map(c => c.id === id ? { ...c, duration: Math.max(1, c.duration + amount) } : c) })) }) : t)
+  const save = async () => {
+    if (!timeline || !projectId) return
+    setBusy(true); setNotice('')
+    try { const r: any = await apiClient.put(`/videos/timeline/${projectId}`, timeline); const d = r.data?.data ?? r.data; setTimeline(d.timeline ?? d); setNotice('Timeline saved') }
+    catch (e: any) { setNotice(e?.message || 'Unable to save timeline') }
+    finally { setBusy(false) }
+  }
+  const render = async () => {
+    if (!projectId || !clips.length) return setNotice('Select a project with scenes first')
+    setBusy(true); setNotice('Rendering video…')
+    try { await save(); await apiClient.post('/videos/render', { projectId, sceneIds: clips.map(c => c.sceneId || c.id) }); setNotice('Video render completed'); await load(projectId) }
+    catch (e: any) { setNotice(e?.message || 'Video rendering failed') }
+    finally { setBusy(false) }
+  }
+
+  return <AppShell><PageContainer>
+    <PageHeader title="Video Editor & Timeline" description="Arrange scenes, adjust timing, save and render your video." action={<Badge variant="studio">20 credits</Badge>} />
+    <Card className="mb-6"><CardContent className="p-4 flex flex-col md:flex-row gap-3">
+      <select value={projectId} onChange={e => setProjectId(e.target.value)} className="h-10 flex-1 rounded-md border bg-background px-3 text-sm"><option value="">Select a project</option>{projects.map(p => <option key={p.id} value={p.id}>{p.title || p.id}</option>)}</select>
+      <Button variant="outline" disabled={!projectId || busy} onClick={() => void load(projectId)}><RefreshCw className="h-4 w-4 mr-2" />Refresh</Button>
+      <Button variant="outline" disabled={!timeline || busy} onClick={() => void save()}><Save className="h-4 w-4 mr-2" />Save</Button>
+      <Button variant="studio" disabled={!clips.length || busy} onClick={() => void render()}><Video className="h-4 w-4 mr-2" />{busy ? 'Working…' : 'Generate Video'}</Button>
+    </CardContent></Card>
+    {notice && <div className="mb-6 rounded-lg border px-4 py-3 text-sm text-muted-foreground">{notice}</div>}
+    <div className="grid lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-2 space-y-6">
+        <Card><CardHeader><CardTitle className="flex justify-between"><span>Timeline</span><span className="text-sm font-normal text-muted-foreground">{clips.length} clips • {duration}s</span></CardTitle></CardHeader><CardContent className="space-y-3">
+          {!clips.length && <div className="py-12 text-center text-sm text-muted-foreground">Select a project with scenes to build its timeline.</div>}
+          {clips.map((c, i) => <div key={c.id} className="border rounded-xl p-3 flex items-center gap-3"><Badge variant="secondary">{i + 1}</Badge><div className="flex-1 min-w-0"><div className="font-medium text-sm truncate">{c.title}</div><div className="text-xs text-muted-foreground">Start {c.start}s • {c.duration}s • {c.transition || 'CUT'}</div></div><Button size="icon" variant="ghost" onClick={() => resize(c.id, -1)}><Minus className="h-4 w-4" /></Button><span className="text-sm w-8 text-center">{c.duration}s</span><Button size="icon" variant="ghost" onClick={() => resize(c.id, 1)}><Plus className="h-4 w-4" /></Button></div>)}
+        </CardContent></Card>
+      </div>
+      <div className="space-y-6">
+        <Card className="p-4"><div className="aspect-video bg-muted rounded-xl flex items-center justify-center overflow-hidden">{jobs[0]?.url ? <video src={jobs[0].url} controls className="w-full h-full" /> : <div className="text-center text-muted-foreground"><Play className="h-10 w-10 mx-auto mb-2" /><p className="text-sm">Rendered video preview</p></div>}</div><div className="mt-3 text-sm font-medium">Video Preview</div><div className="text-xs text-muted-foreground">{timeline?.aspectRatio || '16:9'} • {duration}s • {timeline?.fps || 30}fps</div></Card>
+        <Card><CardHeader><CardTitle className="text-base">Rendered Videos</CardTitle></CardHeader><CardContent className="space-y-3">{!jobs.length && <div className="text-sm text-muted-foreground">No rendered videos yet.</div>}{jobs.slice(0, 5).map(j => <div key={j.id} className="flex items-center gap-2 text-sm"><Video className="h-4 w-4" /><span className="flex-1">{j.durationSeconds ? `${j.durationSeconds}s render` : 'Video render'}</span>{j.url && <a href={j.url} target="_blank" rel="noreferrer"><Download className="h-4 w-4" /></a>}</div>)}</CardContent></Card>
+      </div>
+    </div>
+  </PageContainer></AppShell>
 }
