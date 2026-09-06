@@ -26,12 +26,9 @@ function isOpenAICompatible(name: string): boolean {
 }
 
 async function generateCharacterBible(provider: any, model: string, prompt: string): Promise<any[]> {
-  if (!isOpenAICompatible(provider.name)) {
-    throw new Error(`Provider ${provider.name} is not supported by the character bible executor`)
-  }
+  if (!isOpenAICompatible(provider.name)) throw new Error(`Provider ${provider.name} is not supported by the character bible executor`)
   const apiKey = providerApiKey(provider.name)
   if (!apiKey) throw new Error(`API key is not configured for provider ${provider.name}`)
-
   const baseUrl = (provider.baseUrl || (provider.name.toUpperCase().includes('GROQ') ? 'https://api.groq.com/openai/v1' : 'https://api.openai.com/v1')).replace(/\/$/, '')
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 120000)
@@ -58,20 +55,12 @@ async function generateCharacterBible(provider: any, model: string, prompt: stri
     const parsed = JSON.parse(content)
     if (!Array.isArray(parsed.characters) || parsed.characters.length === 0) throw new Error('AI provider returned no characters')
     return parsed.characters
-  } finally {
-    clearTimeout(timeout)
-  }
+  } finally { clearTimeout(timeout) }
 }
 
 router.get('/project/:projectId', async (req: AuthRequest, res, next) => {
   try {
-    const result = await query(
-      `SELECT c.* FROM characters c
-       INNER JOIN projects p ON p.id = c.project_id
-       WHERE c.project_id = $1 AND p.user_id = $2 AND p.deleted_at IS NULL
-       ORDER BY c.created_at ASC`,
-      [req.params.projectId, req.user!.id]
-    )
+    const result = await query(`SELECT c.* FROM characters c INNER JOIN projects p ON p.id = c.project_id WHERE c.project_id = $1 AND p.user_id = $2 AND p.deleted_at IS NULL ORDER BY c.created_at ASC`, [req.params.projectId, req.user!.id])
     return res.json({ success: true, data: result.rows })
   } catch (error) { next(error) }
 })
@@ -83,48 +72,26 @@ router.post('/generate-bible', async (req: AuthRequest, res, next) => {
     if (!projectId) return next(createError('projectId is required', 400))
     if (typeof prompt !== 'string' || prompt.trim().length < 10) return next(createError('prompt must contain at least 10 characters', 400))
     const count = Math.min(Math.max(Number(characterCount || 4), 1), 12)
-
-    const project = await query(
-      'SELECT id, title, description, genre, cultural_mode FROM projects WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
-      [projectId, req.user!.id]
-    )
+    const project = await query('SELECT id, title, description, genre, cultural_mode FROM projects WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL', [projectId, req.user!.id])
     if (!project.rows.length) return next(createError('Project not found', 404))
-
     const user = await query('SELECT plan, credits FROM users WHERE id = $1 AND is_active = TRUE AND deleted_at IS NULL', [req.user!.id])
     if (!user.rows.length) return next(createError('User account not found', 404))
     const plan = String(user.rows[0].plan)
     const credits = Number(user.rows[0].credits)
     const route = await aiProviderRouter.route({ capability: 'TEXT', prompt: prompt.trim(), userId: req.user!.id, plan, creditsAvailable: credits, metadata: { credits: CHARACTER_BIBLE_CREDIT_COST } })
-
-    const generation = await query(
-      `INSERT INTO generations (user_id, project_id, type, prompt, provider, model, status, credits_reserved, metadata)
-       VALUES ($1, $2, 'CHARACTER', $3, $4, $5, 'PENDING', $6, $7) RETURNING id`,
-      [req.user!.id, projectId, prompt.trim(), route.provider.name, route.model, CHARACTER_BIBLE_CREDIT_COST, JSON.stringify({ characterCount: count })]
-    )
+    const generation = await query(`INSERT INTO generations (user_id, project_id, type, prompt, provider, model, status, credits_reserved, metadata) VALUES ($1, $2, 'CHARACTER', $3, $4, $5, 'PENDING', $6, $7) RETURNING id`, [req.user!.id, projectId, prompt.trim(), route.provider.name, route.model, CHARACTER_BIBLE_CREDIT_COST, JSON.stringify({ characterCount: count })])
     generationId = generation.rows[0].id
-
     await creditService.reserveCredits(req.user!.id, CHARACTER_BIBLE_CREDIT_COST, generationId, 'Character Bible generation')
     await query(`UPDATE generations SET status = 'PROCESSING', updated_at = NOW() WHERE id = $1`, [generationId])
-
     const requestPrompt = JSON.stringify({ request: prompt.trim(), characterCount: count, projectTitle: project.rows[0].title, projectDescription: project.rows[0].description, genre: project.rows[0].genre, culturalMode: project.rows[0].cultural_mode })
-    const characters = await aiProviderRouter.executeWithFallback(
-      { capability: 'TEXT', prompt: requestPrompt, userId: req.user!.id, plan, creditsAvailable: credits, metadata: { credits: CHARACTER_BIBLE_CREDIT_COST, model: route.model } },
-      (provider, model) => generateCharacterBible(provider, model, requestPrompt)
-    )
-
+    const characters = await aiProviderRouter.executeWithFallback({ capability: 'TEXT', prompt: requestPrompt, userId: req.user!.id, plan, creditsAvailable: credits, metadata: { credits: CHARACTER_BIBLE_CREDIT_COST, model: route.model } }, (provider, model) => generateCharacterBible(provider, model, requestPrompt))
     const created = []
     for (const character of characters.slice(0, count)) {
       if (!character?.name || !String(character.name).trim()) continue
-      const saved = await query(
-        `INSERT INTO characters (project_id, name, role, age, gender, appearance, personality, background, clothing_style, skin_tone, hair_style)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-         RETURNING *`,
-        [projectId, String(character.name).trim(), character.role ?? null, character.age ?? null, character.gender ?? null, character.appearance ?? null, character.personality ?? null, character.background ?? null, character.clothingStyle ?? null, character.skinTone ?? null, character.hairStyle ?? null]
-      )
+      const saved = await query(`INSERT INTO characters (project_id, name, role, age, gender, appearance, personality, background, clothing_style, skin_tone, hair_style) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`, [projectId, String(character.name).trim(), character.role ?? null, character.age ?? null, character.gender ?? null, character.appearance ?? null, character.personality ?? null, character.background ?? null, character.clothingStyle ?? null, character.skinTone ?? null, character.hairStyle ?? null])
       created.push(saved.rows[0])
     }
     if (!created.length) throw new Error('AI returned no valid characters')
-
     await creditService.consumeReservedCredits(req.user!.id, generationId)
     await query(`UPDATE generations SET status = 'COMPLETED', credits_consumed = credits_reserved, updated_at = NOW() WHERE id = $1`, [generationId])
     return res.status(201).json({ success: true, message: 'Character Bible generated successfully', data: { generationId, characters: created } })
@@ -148,12 +115,7 @@ router.post('/', async (req: AuthRequest, res, next) => {
     if (!projectId || !name?.trim()) return next(createError('projectId and name are required', 400))
     const project = await query('SELECT id FROM projects WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL', [projectId, req.user!.id])
     if (project.rows.length === 0) return next(createError('Project not found', 404))
-    const result = await query(
-      `INSERT INTO characters (project_id, name, role, age, gender, appearance, personality, background, clothing_style, skin_tone, hair_style)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-       RETURNING *`,
-      [projectId, name.trim(), role ?? null, age ?? null, gender ?? null, appearance ?? null, personality ?? null, background ?? null, clothingStyle ?? null, skinTone ?? null, hairStyle ?? null]
-    )
+    const result = await query(`INSERT INTO characters (project_id, name, role, age, gender, appearance, personality, background, clothing_style, skin_tone, hair_style) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`, [projectId, name.trim(), role ?? null, age ?? null, gender ?? null, appearance ?? null, personality ?? null, background ?? null, clothingStyle ?? null, skinTone ?? null, hairStyle ?? null])
     return res.status(201).json({ success: true, data: result.rows[0] })
   } catch (error) { next(error) }
 })
@@ -162,11 +124,7 @@ router.put('/:id', async (req: AuthRequest, res, next) => {
   try {
     const { name, role, age, gender, appearance, personality, background, clothingStyle, skinTone, hairStyle } = req.body ?? {}
     if (name !== undefined && !String(name).trim()) return next(createError('name cannot be empty', 400))
-    const result = await query(
-      `UPDATE characters c SET name = COALESCE($1, c.name), role = COALESCE($2, c.role), age = COALESCE($3, c.age), gender = COALESCE($4, c.gender), appearance = COALESCE($5, c.appearance), personality = COALESCE($6, c.personality), background = COALESCE($7, c.background), clothing_style = COALESCE($8, c.clothing_style), skin_tone = COALESCE($9, c.skin_tone), hair_style = COALESCE($10, c.hair_style), updated_at = NOW()
-       FROM projects p WHERE c.id = $11 AND c.project_id = p.id AND p.user_id = $12 AND p.deleted_at IS NULL AND c.is_locked = FALSE RETURNING c.*`,
-      [name !== undefined ? String(name).trim() : null, role, age, gender, appearance, personality, background, clothingStyle, skinTone, hairStyle, req.params.id, req.user!.id]
-    )
+    const result = await query(`UPDATE characters c SET name = COALESCE($1, c.name), role = COALESCE($2, c.role), age = COALESCE($3, c.age), gender = COALESCE($4, c.gender), appearance = COALESCE($5, c.appearance), personality = COALESCE($6, c.personality), background = COALESCE($7, c.background), clothing_style = COALESCE($8, c.clothing_style), skin_tone = COALESCE($9, c.skin_tone), hair_style = COALESCE($10, c.hair_style), updated_at = NOW() FROM projects p WHERE c.id = $11 AND c.project_id = p.id AND p.user_id = $12 AND p.deleted_at IS NULL AND c.is_locked = FALSE RETURNING c.*`, [name !== undefined ? String(name).trim() : null, role, age, gender, appearance, personality, background, clothingStyle, skinTone, hairStyle, req.params.id, req.user!.id])
     if (result.rows.length === 0) return next(createError('Character not found or locked', 404))
     return res.json({ success: true, data: result.rows[0] })
   } catch (error) { next(error) }
@@ -185,6 +143,14 @@ router.put('/:id/lock', async (req: AuthRequest, res, next) => {
     const result = await query(`UPDATE characters c SET is_locked = TRUE, updated_at = NOW() FROM projects p WHERE c.id = $1 AND c.project_id = p.id AND p.user_id = $2 AND p.deleted_at IS NULL RETURNING c.*`, [req.params.id, req.user!.id])
     if (result.rows.length === 0) return next(createError('Character not found', 404))
     return res.json({ success: true, message: 'Character locked', data: result.rows[0] })
+  } catch (error) { next(error) }
+})
+
+router.put('/:id/unlock', async (req: AuthRequest, res, next) => {
+  try {
+    const result = await query(`UPDATE characters c SET is_locked = FALSE, updated_at = NOW() FROM projects p WHERE c.id = $1 AND c.project_id = p.id AND p.user_id = $2 AND p.deleted_at IS NULL RETURNING c.*`, [req.params.id, req.user!.id])
+    if (result.rows.length === 0) return next(createError('Character not found', 404))
+    return res.json({ success: true, message: 'Character unlocked', data: result.rows[0] })
   } catch (error) { next(error) }
 })
 
