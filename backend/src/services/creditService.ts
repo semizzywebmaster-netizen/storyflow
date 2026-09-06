@@ -15,7 +15,7 @@ export class CreditService {
       if (balance < amount) throw new Error('Insufficient credits')
       const updated = await client.query('UPDATE users SET credits = credits - $1, updated_at = NOW() WHERE id = $2 RETURNING credits', [amount, userId])
       const balanceAfter = Number(updated.rows[0].credits)
-      await client.query(`INSERT INTO credit_transactions (user_id, amount, type, description, reference_id, balance_after) VALUES ($1, $2, 'GENERATION', $3, $4::uuid, $5)`, [userId, -amount, description, referenceId, balanceAfter])
+      await client.query(`INSERT INTO credit_transactions (user_id, amount, type, description, reference_id, balance_after, metadata) VALUES ($1, $2, 'GENERATION', $3, $4::uuid, $5, '{"state":"RESERVED"}'::jsonb)`, [userId, -amount, description, referenceId, balanceAfter])
       await client.query('COMMIT')
       return { success: true, balanceAfter }
     } catch (error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
@@ -23,8 +23,14 @@ export class CreditService {
 
   async consumeReservedCredits(userId: string, referenceId: string | null): Promise<void> {
     if (!referenceId) throw new Error('Credit reservation reference is required')
-    const result = await pool.query(`UPDATE credit_transactions SET metadata = metadata || '{"state":"CONSUMED"}'::jsonb WHERE user_id = $1 AND reference_id = $2::uuid AND COALESCE(metadata->>'state','RESERVED') = 'RESERVED'`, [userId, referenceId])
-    if (result.rowCount === 0) throw new Error('Credit reservation not found or already finalized')
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      const result = await client.query(`SELECT id FROM credit_transactions WHERE user_id = $1 AND reference_id = $2::uuid AND COALESCE(metadata->>'state','RESERVED') = 'RESERVED' FOR UPDATE`, [userId, referenceId])
+      if (!result.rows.length) throw new Error('Credit reservation not found or already finalized')
+      await client.query(`UPDATE credit_transactions SET metadata = metadata || '{"state":"CONSUMED"}'::jsonb WHERE id = $1`, [result.rows[0].id])
+      await client.query('COMMIT')
+    } catch (error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
   }
 
   async releaseReservedCredits(userId: string, amount: number, referenceId: string, reason: string): Promise<void> {
@@ -32,13 +38,15 @@ export class CreditService {
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
-      const reservation = await client.query(`SELECT id FROM credit_transactions WHERE user_id = $1 AND reference_id = $2::uuid AND COALESCE(metadata->>'state','RESERVED') = 'RESERVED' FOR UPDATE`, [userId, referenceId])
+      const reservation = await client.query(`SELECT id, amount FROM credit_transactions WHERE user_id = $1 AND reference_id = $2::uuid AND COALESCE(metadata->>'state','RESERVED') = 'RESERVED' FOR UPDATE`, [userId, referenceId])
       if (!reservation.rows.length) throw new Error('Credit reservation not found or already finalized')
-      const updated = await client.query('UPDATE users SET credits = credits + $1, updated_at = NOW() WHERE id = $2 RETURNING credits', [amount, userId])
+      const reservedAmount = Math.abs(Number(reservation.rows[0].amount))
+      if (reservedAmount !== amount) throw new Error('Credit release amount does not match the reserved amount')
+      const updated = await client.query('UPDATE users SET credits = credits + $1, updated_at = NOW() WHERE id = $2 RETURNING credits', [reservedAmount, userId])
       if (!updated.rows.length) throw new Error('User not found')
       const balanceAfter = Number(updated.rows[0].credits)
       await client.query(`UPDATE credit_transactions SET metadata = metadata || '{"state":"RELEASED"}'::jsonb WHERE id = $1`, [reservation.rows[0].id])
-      await client.query(`INSERT INTO credit_transactions (user_id, amount, type, description, reference_id, balance_after, metadata) VALUES ($1, $2, 'REFUND', $3, $4::uuid, $5, '{"state":"REFUND"}'::jsonb)`, [userId, amount, reason, referenceId, balanceAfter])
+      await client.query(`INSERT INTO credit_transactions (user_id, amount, type, description, reference_id, balance_after, metadata) VALUES ($1, $2, 'REFUND', $3, $4::uuid, $5, '{"state":"REFUND"}'::jsonb)`, [userId, reservedAmount, reason, referenceId, balanceAfter])
       await client.query('COMMIT')
     } catch (error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
   }
