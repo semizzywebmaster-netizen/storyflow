@@ -2,23 +2,16 @@
  * Service Factory - Centralized service provider.
  * Real services are used in production; mocks are opt-in only.
  */
-
 import { appConfig } from '@/config'
 import type { IAuthService, IProjectService, IStoryService, ICharacterService, ISceneService, IImageService, IVoiceService, IVideoService, ICreditService, IWalletService, IPaymentService, INotificationService, IAdminService } from './interfaces'
-import { realAuthService, realProjectService, realStoryService, realCharacterService, realCreditService, realWalletService, realNotificationService } from './real'
-
+import { realAuthService, realProjectService, realStoryService, realCharacterService, realSceneService, realCreditService, realWalletService, realNotificationService } from './real'
 let services: { auth?: IAuthService; project?: IProjectService; story?: IStoryService; character?: ICharacterService; scene?: ISceneService; image?: IImageService; voice?: IVoiceService; video?: IVideoService; credit?: ICreditService; wallet?: IWalletService; payment?: IPaymentService; notification?: INotificationService; admin?: IAdminService } = {}
-
-async function loadMock<T>(loader: () => Promise<any>): Promise<T> {
-  const mod = await loader()
-  return (mod.default || mod) as T
-}
-
+async function loadMock<T>(loader: () => Promise<any>): Promise<T> { const mod = await loader(); return (mod.default || mod) as T }
 export async function getAuthService(): Promise<IAuthService> { if (services.auth) return services.auth; services.auth = appConfig.enableMock ? await loadMock(() => import('./mock/authMockService')) : realAuthService as unknown as IAuthService; return services.auth }
 export async function getProjectService(): Promise<IProjectService> { if (services.project) return services.project; services.project = appConfig.enableMock ? await loadMock(() => import('./mock/projectMockService')) : realProjectService as unknown as IProjectService; return services.project }
 export async function getStoryService(): Promise<IStoryService> { if (services.story) return services.story; services.story = appConfig.enableMock ? await loadMock(() => import('./mock/storyMockService')) : realStoryService as unknown as IStoryService; return services.story }
 export async function getCharacterService(): Promise<ICharacterService> { if (services.character) return services.character; services.character = appConfig.enableMock ? await loadMock(() => import('./mock/characterMockService')) : realCharacterService as unknown as ICharacterService; return services.character }
-export async function getSceneService(): Promise<ISceneService> { if (services.scene) return services.scene; services.scene = await loadMock(() => import('./mock/sceneMockService')); return services.scene }
+export async function getSceneService(): Promise<ISceneService> { if (services.scene) return services.scene; services.scene = appConfig.enableMock ? await loadMock(() => import('./mock/sceneMockService')) : realSceneService as unknown as ISceneService; return services.scene }
 export async function getImageService(): Promise<IImageService> { if (services.image) return services.image; services.image = await loadMock(() => import('./mock/imageMockService')); return services.image }
 export async function getVoiceService(): Promise<IVoiceService> { if (services.voice) return services.voice; services.voice = await loadMock(() => import('./mock/voiceMockService')); return services.voice }
 export async function getVideoService(): Promise<IVideoService> { if (services.video) return services.video; services.video = await loadMock(() => import('./mock/videoMockService')); return services.video }
@@ -27,5 +20,4 @@ export async function getWalletService(): Promise<IWalletService> { if (services
 export async function getPaymentService(): Promise<IPaymentService> { if (services.payment) return services.payment; services.payment = await loadMock(() => import('./mock/paymentMockService')); return services.payment }
 export async function getNotificationService(): Promise<INotificationService> { if (services.notification) return services.notification; services.notification = appConfig.enableMock ? await loadMock(() => import('./mock/notificationMockService')) : realNotificationService as unknown as INotificationService; return services.notification }
 export async function getAdminService(): Promise<IAdminService> { if (services.admin) return services.admin; services.admin = await loadMock(() => import('./mock/adminMockService')); return services.admin }
-
 export { apiClient } from '@/lib/api-client'
