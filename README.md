@@ -16,15 +16,15 @@ The frontend can be deployed as static assets. The complete backend requires a p
 
 Recommended split-origin setup:
 
-- Frontend: `https://storyflow.online`
-- API: `https://api.storyflow.online`
+- Frontend: `https://storyfoundry.online`
+- API: `https://api.storyfoundry.online`
 
 Alternatively, use a reverse proxy so `/api/*` on the frontend origin routes to the Node backend.
 
 ## Production Deployment
 
 1. Configure production environment variables from `backend/.env.example`.
-2. Set frontend `VITE_API_URL` to the public API base, such as `https://api.storyflow.online/api` for split-origin deployment.
+2. Set frontend `VITE_API_URL` to the public API base, such as `https://api.storyfoundry.online/api` for split-origin deployment.
 3. Keep all AI, database, R2 and payment secrets server-side; never put them in `VITE_*` variables.
 4. Set `ENABLE_MOCK=false` on the backend and frontend.
 5. Build and deploy the backend with FFmpeg available.
